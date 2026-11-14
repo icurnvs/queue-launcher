@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.0" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.2" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" ExcludeAssets="build;buildTransitive" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <None Update="fixture.html" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <Reference Include="Microsoft.Web.WebView2.Core" HintPath="$(NuGetPackageRoot)microsoft.web.webview2/1.0.4314.35/lib/net462/Microsoft.Web.WebView2.Core.dll" />
+  </ItemGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <DefineConstants>$(DefineConstants);WINDOWS_BUILD</DefineConstants>
+  </PropertyGroup>
+  <Target Name="BuildMacCleanup" AfterTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <Exec Command="xcrun clang -dynamiclib -fobjc-arc -mmacosx-version-min=14.0 -framework Foundation -framework WebKit &quot;$(MSBuildProjectDirectory)/MacCleanup.m&quot; -o &quot;$(TargetDir)libQueuePrototypeCleanup.dylib&quot;" />
+  </Target>
+</Project>
