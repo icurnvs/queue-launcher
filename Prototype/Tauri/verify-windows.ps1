@@ -1,4 +1,8 @@
-param([switch]$SkipBuild, [switch]$NamedProfiles)
+param(
+    [switch]$SkipBuild,
+    [switch]$NamedProfiles,
+    [string]$FixedRuntimePath
+)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -42,9 +46,19 @@ public static class ProcessTree {
 }
 "@
 
+$fixedBrowser = if ($FixedRuntimePath) {
+    $runtime = (Resolve-Path -LiteralPath $FixedRuntimePath).ProviderPath
+    Get-Item -LiteralPath (Join-Path $runtime 'msedgewebview2.exe')
+}
+
 Push-Location $PSScriptRoot
 $previousData = $env:QUEUE_TAURI_PROTOTYPE_DATA
+$previousRuntime = $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER
 try {
+    if ($fixedBrowser) {
+        $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $fixedBrowser.DirectoryName
+        "Fixed WebView2 $($fixedBrowser.VersionInfo.ProductVersion) at $($fixedBrowser.FullName)"
+    }
     if (!$SkipBuild) {
         cargo build --locked
         if ($LASTEXITCODE) { throw 'Prototype build failed' }
@@ -89,6 +103,11 @@ try {
                     } while ($tracked.Count -gt $previousCount)
                     $children = @($processes | Where-Object { $tracked.Contains($_.Id) })
                     if ($browser.Count -eq 0) { throw 'Could not sample the WebView2 process tree' }
+                    if ($fixedBrowser) {
+                        $wrongRuntime = Get-Process -Id $browser.Id | Where-Object Path -ne $fixedBrowser.FullName
+                        if ($wrongRuntime) { throw 'A WebView2 browser process did not use the requested Fixed Version executable' }
+                        "Verified Fixed Version executable for all $($browser.Count) WebView2 browser processes at $count views"
+                    }
                     $memory = (Get-Process -Id $children.Id -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum
                     $profilePath = if ($NamedProfiles) { 'named-profiles/webview2' } else { 'profiles' }
                     $files = Get-ChildItem -LiteralPath (Join-Path $env:QUEUE_TAURI_PROTOTYPE_DATA $profilePath) -File -Recurse
@@ -109,5 +128,6 @@ try {
     "Scratch data: $scratch"
 } finally {
     $env:QUEUE_TAURI_PROTOTYPE_DATA = $previousData
+    $env:WEBVIEW2_BROWSER_EXECUTABLE_FOLDER = $previousRuntime
     Pop-Location
 }

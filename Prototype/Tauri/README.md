@@ -62,11 +62,11 @@ native verification run for isolation, persistence, view switching, and
 WebKit store removal. The Apple Silicon Rust type check passed on Windows with DOCS_RS=1 to
 skip compiling the Objective-C helper. It did not link or launch the app.
 
-The Windows run uses Evergreen WebView2. Tauri documents a
+The directory-versus-profile comparison uses Evergreen WebView2. Tauri documents a
 `bundle.windows.webviewInstallMode` option with `type: fixedRuntime` and the
-extracted runtime folder for its installer. The existing portable ZIP would
-need a separate check using the bundled runtime and the Windows 10 app
-container read permissions from the existing packaging script.
+extracted runtime folder for its installer. The named-profile check below uses the runtime from the existing portable
+ZIP on Windows 11. A Tauri ZIP build and the Windows 10 app container
+permissions remain untested.
 [Windows installer documentation](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options)
 
 The fixture is the only supported page. Window dimensions are fixed for the
@@ -136,3 +136,30 @@ still returned `ERROR_DELETE_PENDING` after the directory disappeared.
 The test checks that a fresh UUID starts with empty storage. Normal
 session creation always uses a new UUID.
 [WebView2 profile deletion documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile8?view=webview2-1.0.3912.50)
+
+
+## Windows Fixed Version check
+
+Use the extracted runtime folder from the existing Queue Launcher portable
+bundle. The verification script sets `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER`
+for the run and confirms the executable path of every parent WebView2
+browser process at both scale checkpoints.
+[Microsoft Fixed Version distribution](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution#the-fixed-version-runtime-distribution-mode)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -NamedProfiles -FixedRuntimePath 'C:\path\to\WebView2Runtime'
+```
+
+Named profiles passed isolation, no-reload switching, relaunch persistence,
+and targeted cleanup with the bundled x64 WebView2 157.0.4341.60 on
+Windows 11. The old name still returned `ERROR_DELETE_PENDING` after
+its directory was removed. A new UUID opened with empty storage.
+
+| Fixture views | Created | All views ready | Switch and fixture round trip | Browser processes | Total WebView2 processes |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 12 | 3.30 s | 3.90 s | 24-33 ms | 2 | 24 |
+| 50 | 10.81 s | 11.94 s | 28-54 ms | 2 | 62 |
+
+Both browser processes used the bundled executable at both sizes. The
+processes returned success with the same WebView2 window-class diagnostic
+observed at Evergreen shutdown. These are single-run measurements.
