@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 
-sealed class LauncherForm : Form
+sealed partial class LauncherForm : Form
 {
     private const int MaxSessions = 50;
     private readonly BatchStore store;
@@ -31,7 +31,6 @@ sealed class LauncherForm : Form
         Dock = DockStyle.Fill, ReadOnly = true, MultiSelect = false, RowHeadersVisible = false,
         AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToResizeRows = false,
         SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells,
         ColumnHeadersVisible = false, BackgroundColor = SystemColors.Window, BorderStyle = BorderStyle.None,
         AccessibleName = "Browser sessions"
     };
@@ -53,59 +52,7 @@ sealed class LauncherForm : Form
     public LauncherForm(string directory)
     {
         store = new BatchStore(directory);
-        Text = "Queue Launcher";
-        ClientSize = new(1080, 720);
-        MinimumSize = new(850, 500);
-        StartPosition = FormStartPosition.CenterScreen;
-
-        var root = Stack();
-        root.RowStyles.Add(new(SizeType.AutoSize));
-        root.RowStyles.Add(new(SizeType.Percent, 100));
-        root.RowStyles.Add(new(SizeType.AutoSize));
-        root.RowStyles.Add(new(SizeType.AutoSize));
-        Controls.Add(root);
-
-        var header = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new(8), ColumnCount = 5 };
-        header.ColumnStyles.Add(new(SizeType.AutoSize));
-        header.ColumnStyles.Add(new(SizeType.Percent, 100));
-        header.Controls.Add(FieldLabel("Release URL"), 0, 0);
-        header.Controls.Add(releaseUrl, 1, 0);
-        header.Controls.Add(FieldLabel("Sessions"), 2, 0);
-        header.Controls.Add(count, 3, 0);
-        header.Controls.Add(open, 4, 0);
-        root.Controls.Add(header, 0, 0);
-
-        var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
-        body.ColumnStyles.Add(new(SizeType.Absolute, 330));
-        body.ColumnStyles.Add(new(SizeType.Percent, 100));
-        var sidebar = Stack();
-        sidebar.RowStyles.Add(new(SizeType.AutoSize));
-        sidebar.RowStyles.Add(new(SizeType.Percent, 100));
-        sidebar.RowStyles.Add(new(SizeType.AutoSize));
-        sidebar.Controls.Add(ready, 0, 0);
-        sessionList.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-            DefaultCellStyle = new() { WrapMode = DataGridViewTriState.True, Padding = new(5) }
-        });
-        sidebar.Controls.Add(sessionList, 0, 1);
-        sidebar.Controls.Add(ButtonBar(copy, copyClose, close), 0, 2);
-        body.Controls.Add(sidebar, 0, 0);
-        body.Controls.Add(browserPane, 1, 0);
-        browserPane.Controls.Add(placeholder);
-        placeholder.Controls.Add(browserMessage);
-        placeholder.Controls.Add(retry);
-        browserPane.Resize += (_, _) => CenterPlaceholder();
-        placeholder.SizeChanged += (_, _) => CenterPlaceholder();
-        root.Controls.Add(body, 0, 1);
-
-        var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2 };
-        footer.ColumnStyles.Add(new(SizeType.Percent, 100));
-        footer.ColumnStyles.Add(new(SizeType.AutoSize));
-        footer.Controls.Add(ButtonBar(end, logs), 0, 0);
-        footer.Controls.Add(ButtonBar(back, reload, add, next, mark), 1, 0);
-        root.Controls.Add(footer, 0, 2);
-        root.Controls.Add(notice, 0, 3);
+        BuildLayout();
 
         releaseUrl.TextChanged += (_, _) => RefreshControls();
         sessionList.SelectionChanged += (_, _) =>
@@ -484,6 +431,8 @@ sealed class LauncherForm : Form
             else if (status?.PurchaseWindow is { } window) lines.Add($"{window} once admitted");
             var text = string.Join(Environment.NewLine, lines);
             if (!Equals(row.Cells[0].Value, text)) row.Cells[0].Value = text;
+            var height = SessionRowHeight(row, lines);
+            if (row.Height != height) row.Height = height;
         }
 
         var active = selected;
@@ -494,11 +443,10 @@ sealed class LauncherForm : Form
                 session.View.CoreWebView2 is not null;
         }
         placeholder.Visible = active is null || !active.View.Visible;
-        browserMessage.Text = active?.Error ?? (active is null ? "No open sessions" : "Opening browser session…");
+        RefreshLayout(active);
         retry.Visible = active?.Error is not null;
         retry.Enabled = !busy;
         if (placeholder.Visible) placeholder.BringToFront();
-        ready.Text = $"{sessions.Count(session => session.Saved.Ready)} of {sessions.Count} ready";
         releaseUrl.Enabled = count.Enabled = stateLoaded && !busy && batch is null;
         open.Enabled = releaseUrl.Enabled && Destination is not null;
         add.Enabled = !busy && batch is not null && sessions.Count < MaxSessions;
@@ -513,17 +461,4 @@ sealed class LauncherForm : Form
         notice.Visible = notice.Text.Length > 0;
     }
 
-    private void CenterPlaceholder() => placeholder.Location = new(
-        Math.Max(0, (browserPane.ClientSize.Width - placeholder.Width) / 2),
-        Math.Max(0, (browserPane.ClientSize.Height - placeholder.Height) / 2));
-
-    private static Button Button(string text) => new() { Text = text, AutoSize = true };
-    private static Label FieldLabel(string text) => new() { Text = text, Anchor = AnchorStyles.Left, AutoSize = true };
-    private static TableLayoutPanel Stack() => new() { Dock = DockStyle.Fill, ColumnCount = 1, Margin = Padding.Empty };
-    private static FlowLayoutPanel ButtonBar(params Control[] buttons)
-    {
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, Padding = new(4) };
-        bar.Controls.AddRange(buttons);
-        return bar;
-    }
 }
