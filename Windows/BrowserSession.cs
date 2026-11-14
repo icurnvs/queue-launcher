@@ -3,8 +3,9 @@ using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
-sealed class BrowserSession(SavedSession saved, Uri startUrl, Action<string, int?, int?> log, Action refresh)
+sealed class BrowserSession(SavedSession saved, Uri startUrl, Action<string, int?, int?> log, Action refresh, bool demo = false)
 {
+    public static readonly Uri DemoUrl = new("https://queue-launcher.example/local-waiting-room.html");
     private const string ReadPage = """
         ({
             text: document.body?.innerText ?? '',
@@ -27,7 +28,11 @@ sealed class BrowserSession(SavedSession saved, Uri startUrl, Action<string, int
     public bool Closed { get; set; }
     public bool Opening { get; private set; }
     public bool CanGoBack => !Closed && Error is null && !Opening && View.CanGoBack;
-    public Uri? ShareUrl => !Closed && Status is { } status && View.Source is { } url ? status.ShareUrl(url) : null;
+    public Uri? ShareUrl => !Closed && Status is { } status && View.Source is { } url
+        ? demo && url == DemoUrl && status is { Ahead: not null, QueueId: { } id }
+            ? new Uri(DemoUrl, $"?q={id:D}")
+            : status.ShareUrl(url)
+        : null;
 
     public async Task OpenAsync(CoreWebView2Environment environment, Panel pane)
     {
@@ -42,9 +47,15 @@ sealed class BrowserSession(SavedSession saved, Uri startUrl, Action<string, int
             if (Closed) return;
             var browser = view.CoreWebView2;
             browser.Settings.IsWebMessageEnabled = false;
+            if (demo)
+            {
+                browser.SetVirtualHostNameToFolderMapping(DemoUrl.Host, Path.Combine(AppContext.BaseDirectory, "Demo"),
+                    CoreWebView2HostResourceAccessKind.Deny);
+            }
             browser.NavigationStarting += (_, args) =>
             {
                 if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var url) ||
+                    (demo && url != DemoUrl) ||
                     (url.Scheme is not ("http" or "https") && !(startUrl.IsFile && url == startUrl)))
                 {
                     args.Cancel = true;
@@ -128,7 +139,7 @@ sealed class BrowserSession(SavedSession saved, Uri startUrl, Action<string, int
         try
         {
             if (View.CoreWebView2 is not { } browser || View.Source is not { } url ||
-                !(QueueStatus.IsWaitingRoom(url) || url.IsFile)) return;
+                !(QueueStatus.IsWaitingRoom(url) || url.IsFile || (demo && url == DemoUrl))) return;
             var version = documentVersion;
             var json = await browser.ExecuteScriptAsync(ReadPage);
             if (Closed || version != documentVersion || View.Source != url || Error is not null) return;

@@ -8,6 +8,7 @@ sealed record SavedSession(Guid Profile, int Number)
 }
 
 sealed record SavedBatch(Uri Url, Guid LogId, int NextNumber, int? Selected, List<SavedSession> Sessions);
+sealed record QueueLink(Guid Batch, int Session, Uri Url, DateTimeOffset Seen, int? Ahead);
 
 sealed class BatchStore(string directory)
 {
@@ -22,6 +23,10 @@ sealed class BatchStore(string directory)
     public HashSet<Guid> ReadCleanup() => Read<HashSet<Guid>>("pending-cleanup.json") ?? [];
     public void SaveBatch(SavedBatch? batch) => Write("active-batch.json", batch);
     public void SaveCleanup(HashSet<Guid> profiles) => Write("pending-cleanup.json", profiles);
+    public List<QueueLink> ReadLinks() => Read<List<QueueLink>>("queue-links.json") ?? [];
+    public void SaveLinks(List<QueueLink> links) => Write("queue-links.json", links);
+    public bool ReadSortPreference() => Read<bool>("sort-by-position.json");
+    public void SaveSortPreference(bool enabled) => Write("sort-by-position.json", enabled);
 
     public void Log(Guid batch, string eventName, int? session = null, int? code = null, int? membersAhead = null)
     {

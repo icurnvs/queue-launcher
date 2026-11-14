@@ -19,8 +19,8 @@
     <p>Estimated time to enter: 34 minutes</p>
     <p>When it's your turn, you'll have 10 minutes to complete your purchase.</p>
   </section>
-  <button id="attempts">Simulate attempt limit</button>
   <script>
+    const demo = location.hostname === 'queue-launcher.example';
     const key = 'local-queue-id';
     const id = localStorage.getItem(key) || crypto.randomUUID();
     localStorage.setItem(key, id);
@@ -32,7 +32,7 @@
     const details = document.querySelector('#details');
     document.querySelector('#ahead').textContent =
       Number.parseInt(id.slice(0, 6), 16).toLocaleString('en-US');
-    checkbox.checked = localStorage.getItem('fixture-admitted') === 'true';
+    checkbox.checked = (localStorage.getItem('fixture-admitted') ?? String(demo)) === 'true';
     function showStatus() {
       status.textContent = checkbox.checked
         ? 'In the waiting room'
@@ -43,10 +43,6 @@
     checkbox.addEventListener('change', () => {
       localStorage.setItem('fixture-admitted', checkbox.checked);
       showStatus();
-    });
-    document.querySelector('#attempts').addEventListener('click', () => {
-      status.textContent = 'No more attempts left';
-      details.hidden = true;
     });
   </script>
 </body>

@@ -24,12 +24,74 @@ sealed partial class LauncherForm
     private static readonly Font PositionFont = new("Segoe UI", 13, FontStyle.Bold);
     private readonly Label browserTitle = Heading("Browser", SectionFont);
     private readonly Label browserHint = Heading("", DetailFont);
+    private readonly Label shareFeedback = new()
+    {
+        AutoSize = true, Dock = DockStyle.Fill, Font = LabelFont, ForeColor = Success,
+        BackColor = Workspace, Padding = new(12, 8, 12, 8), Margin = Padding.Empty,
+        UseMnemonic = false, Visible = false, LiveSetting = System.Windows.Forms.Automation.AutomationLiveSetting.Polite
+    };
     private readonly Label emptySessions = Heading("Sessions will appear here.", DetailFont);
     private readonly Panel emptySymbol = new() { Size = new(60, 52), TabStop = false };
     private readonly TableLayoutPanel setup = Stack();
     private readonly FlowLayoutPanel sessionActions = Bar();
     private readonly FlowLayoutPanel browserActions = Bar();
+    private readonly Button history = Button("Link history");
+    private readonly Button demo = Button("Demo mode");
+    private readonly CheckBox sortByPosition = new()
+    {
+        Text = "Sort by queue position", AutoSize = true, Anchor = AnchorStyles.Left,
+        Margin = new(4, 0, 0, 8)
+    };
     private bool centeringPlaceholder;
+
+    private void AddSessionContextMenu()
+    {
+        var menu = new ContextMenuStrip();
+        var copyQueueLink = new ToolStripMenuItem("Copy queue link");
+        var copyAndClose = new ToolStripMenuItem("Copy and close");
+        var closeSession = new ToolStripMenuItem("Close session");
+        menu.Items.AddRange([copyQueueLink, copyAndClose, new ToolStripSeparator(), closeSession]);
+
+        BrowserSession? target = null;
+        void ShowMenu(BrowserSession session, Point location)
+        {
+            if (busy || session.Closed) return;
+            target = session;
+            copyQueueLink.Enabled = copyAndClose.Enabled = session.ShareUrl is not null;
+            menu.Show(sessionList, location);
+        }
+
+        sessionList.CellMouseClick += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right && args.RowIndex >= 0 &&
+                sessionList.Rows[args.RowIndex].Tag is BrowserSession session)
+                ShowMenu(session, sessionList.PointToClient(Cursor.Position));
+        };
+        sessionList.KeyDown += (_, args) =>
+        {
+            if ((args.KeyCode == Keys.Apps || (args.Shift && args.KeyCode == Keys.F10)) &&
+                sessionList.CurrentRow is { Tag: BrowserSession session } row)
+            {
+                args.SuppressKeyPress = true;
+                var bounds = sessionList.GetRowDisplayRectangle(row.Index, cutOverflow: true);
+                ShowMenu(session, new Point(bounds.Left, bounds.Bottom));
+            }
+        };
+        copyQueueLink.Click += (_, _) =>
+        {
+            if (target is { } session) CopySession(session);
+        };
+        copyAndClose.Click += async (_, _) =>
+        {
+            if (target is { } session) await CopyAndCloseAsync(session);
+        };
+        closeSession.Click += async (_, _) =>
+        {
+            if (target is { Closed: false } session && mode.Sessions.Contains(session))
+                await RunAsync(() => RemoveAsync([session]));
+        };
+        sessionList.Disposed += (_, _) => menu.Dispose();
+    }
 
     private void BuildLayout()
     {
@@ -49,6 +111,8 @@ sealed partial class LauncherForm
             ApplyButton(button);
         ApplyButton(add, onMasthead: true);
         ApplyButton(logs, onMasthead: true);
+        ApplyButton(history, onMasthead: true);
+        ApplyButton(demo, onMasthead: true);
         ApplyButton(end, onMasthead: true);
         close.ForeColor = Danger;
         end.ForeColor = Theme(0xFFD4D1, SystemColors.ControlText);
@@ -66,7 +130,7 @@ sealed partial class LauncherForm
         var title = Heading(Text, TitleFont);
         title.ForeColor = MastheadText;
         masthead.Controls.Add(title, 0, 0);
-        masthead.Controls.Add(Bar(add, logs, end), 1, 0);
+        masthead.Controls.Add(Bar(demo, add, history, logs, end), 1, 0);
         root.Controls.Add(masthead, 0, 0);
 
         setup.AutoSize = true;
@@ -111,9 +175,10 @@ sealed partial class LauncherForm
         ready.Padding = Padding.Empty;
         summary.Controls.Add(ready, 1, 0);
         sidebar.RowStyles.Add(new(SizeType.AutoSize));
-        sidebar.RowStyles.Add(new(SizeType.Percent, 100));
         sidebar.RowStyles.Add(new(SizeType.AutoSize));
+        sidebar.RowStyles.Add(new(SizeType.Percent, 100));
         sidebar.Controls.Add(summary, 0, 0);
+        sidebar.Controls.Add(sortByPosition, 0, 1);
 
         var listPane = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         sessionList.BackgroundColor = Paper;
@@ -128,27 +193,30 @@ sealed partial class LauncherForm
         emptySessions.Anchor = AnchorStyles.Top | AnchorStyles.Left;
         emptySessions.Location = new(4, 10);
         listPane.Controls.Add(emptySessions);
-        sidebar.Controls.Add(listPane, 0, 1);
-        sessionActions.WrapContents = true;
-        sessionActions.Dock = DockStyle.Fill;
-        sessionActions.Controls.AddRange([copy, copyClose, close]);
-        sidebar.Controls.Add(sessionActions, 0, 2);
+        sidebar.Controls.Add(listPane, 0, 2);
         body.Controls.Add(sidebar, 0, 0);
 
         var browser = Stack();
         browser.BackColor = Paper;
         browser.Padding = new(1);
         browser.RowStyles.Add(new(SizeType.AutoSize));
+        browser.RowStyles.Add(new(SizeType.AutoSize));
         browser.RowStyles.Add(new(SizeType.Percent, 100));
+        browser.RowStyles.Add(new(SizeType.AutoSize));
         var browserBar = Across();
         browserBar.Padding = new(14, 6, 8, 6);
         browserBar.Controls.Add(browserTitle, 0, 0);
         browserActions.Controls.AddRange([back, reload, next, mark]);
         browserBar.Controls.Add(browserActions, 1, 0);
         browser.Controls.Add(browserBar, 0, 0);
+        sessionActions.Anchor = AnchorStyles.Left;
+        sessionActions.Padding = new(14, 0, 8, 8);
+        sessionActions.Controls.AddRange([copy, copyClose, close]);
+        browser.Controls.Add(sessionActions, 0, 1);
         browserPane.BackColor = Workspace;
         browserPane.Margin = Padding.Empty;
-        browser.Controls.Add(browserPane, 0, 1);
+        browser.Controls.Add(browserPane, 0, 2);
+        browser.Controls.Add(shareFeedback, 0, 3);
         body.Controls.Add(browser, 1, 0);
 
         placeholder.Margin = Padding.Empty;
@@ -176,9 +244,11 @@ sealed partial class LauncherForm
 
     private void RefreshLayout(BrowserSession? active)
     {
-        var hasSessions = sessions.Count > 0;
-        var readyCount = sessions.Count(session => session.Saved.Ready);
-        ready.Text = hasSessions ? $"{readyCount} of {sessions.Count} ready" : "";
+        Text = mode.IsDemo ? "Queue Launcher · Demo mode" : "Queue Launcher";
+        demo.Text = mode.IsDemo ? "Exit demo mode" : "Demo mode";
+        var hasSessions = mode.Sessions.Count > 0;
+        var readyCount = mode.Sessions.Count(session => session.Saved.Ready);
+        ready.Text = hasSessions ? $"{readyCount} of {mode.Sessions.Count} ready" : "";
         sessionList.Visible = hasSessions;
         emptySessions.Visible = !hasSessions;
         setup.Visible = !hasSessions;
@@ -186,11 +256,13 @@ sealed partial class LauncherForm
         sessionActions.Visible = browserActions.Visible = hasSessions;
         add.Visible = hasSessions;
         browserTitle.Text = active is null ? "Browser" : $"Session {active.Saved.Number}";
+        shareFeedback.Visible = shareFeedback.Text.Length > 0;
         emptySymbol.Visible = active is null && !busy;
         browserMessage.Text = active?.Error is not null ? "Page couldn’t load"
             : busy || active is not null ? "Opening sessions…" : "No sessions open";
         browserHint.Text = active?.Error ?? (busy || active is not null
-            ? "Preparing the browser." : "Enter a release URL above to start a batch.");
+            ? "Preparing the browser." : mode.IsDemo
+                ? "Open sessions to start another demo batch." : "Enter a release URL above to start a batch.");
         CenterPlaceholder();
     }
 
@@ -243,7 +315,8 @@ sealed partial class LauncherForm
             var mainText = RowText(line);
             var best = mainText != line;
             var size = TextRenderer.MeasureText(graphics, mainText, font, new(width, int.MaxValue), RowTextFlags);
-            var color = font == PositionFont ? Ink : line is "No more attempts" or "Event ended" or "Session expired" ||
+            var color = font == PositionFont ? Ink : line == "Share link available" ? Accent :
+                line is "No more attempts" or "Event ended" or "Session expired" ||
                 line.StartsWith("Queue-it error ", StringComparison.Ordinal) ? Danger : Muted;
             TextRenderer.DrawText(graphics, mainText, font, new Rectangle(x, y, width, size.Height), color, RowTextFlags);
             if (best)

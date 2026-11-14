@@ -14,13 +14,15 @@ To publish a portable Windows x64 build with .NET included:
 dotnet publish Windows/QueueLauncher.csproj -c Release -r win-x64 --self-contained true -o build/windows-x64
 ```
 
-Launch **QueueLauncher.exe** from the published folder and keep its companion files alongside it. For Windows on ARM, use `win-arm64` as the runtime identifier. Each session uses its own WebView2 profile. Windows batches and drop logs are stored under `%LOCALAPPDATA%\Queue Launcher`. **Copy link**, **Copy and close**, and **Close session** act on the selected sidebar row. Close and **End batch** clear the affected profiles’ browsing data and let WebView2 remove their profile files.
+Launch **QueueLauncher.exe** from the published folder and keep its companion files alongside it. For Windows on ARM, use `win-arm64` as the runtime identifier. Each session uses its own WebView2 profile. Windows batches and drop logs are stored under `%LOCALAPPDATA%\Queue Launcher`. **Copy link**, **Copy and close**, and **Close session** sit under the selected session’s heading above the browser. Close and **End batch** clear the affected profiles’ browsing data and let WebView2 remove their profile files.
 
 To get the offline test URL on Windows, run:
 
 ```powershell
 ([uri](Resolve-Path Scripts/local-waiting-room.html).Path).AbsoluteUri
 ```
+
+Click **Demo mode** in the Windows launcher to switch the main window to an offline batch of 12 sessions with sample queue links. Click **Exit demo mode** to return to your live sessions. The demo has its own browser profiles, history, and logs. Copy actions use the Windows clipboard.
 
 Run the Windows queue-status and link checks with `dotnet run --project Tests/Windows`.
 
@@ -45,6 +47,10 @@ Each session should show a different queue ID. Reload a session to confirm its I
 With Xcode or its command-line tools installed, run `Scripts/package-app.sh`. The script builds and locally signs **build/Queue Launcher.app**.
 
 ## Queue status and relaunch
+
+On Windows, enable **Sort by queue position** to keep the closest spots at the top. Sessions with no reported position appear below them. **Next session** follows the displayed order.
+
+**Link history** saves each distinct shareable link automatically, with its session number and the position shown when the link was saved. You can copy links from history after closing sessions, ending a batch, or reopening the app. Saved links may expire. Windows stores them locally in `queue-links.json`, separate from the drop logs.
 
 For Costco’s waiting room, the sidebar shows the number of members ahead, the estimated wait, and any purchase window or time remaining displayed on the page. **Best spot** marks the fewest members ahead. Click the link icon on the session row to copy that session’s queue link. The recipient opens the same place in line, subject to Costco’s queue expiry and redirect limits. Attempt-limit and expiry messages appear in the same row, along with the Queue-it error ID when the page provides one.
 

@@ -6,7 +6,6 @@ using Microsoft.Web.WebView2.Core;
 sealed partial class LauncherForm : Form
 {
     private const int MaxSessions = 50;
-    private readonly BatchStore store;
     private readonly TextBox releaseUrl = new() { Dock = DockStyle.Fill, AccessibleName = "Release URL", PlaceholderText = "https://…" };
     private readonly NumericUpDown count = new() { Minimum = 1, Maximum = MaxSessions, Value = 5, Width = 58, AccessibleName = "Session count" };
     private readonly Button open = Button("Open sessions");
@@ -35,24 +34,17 @@ sealed partial class LauncherForm : Form
         AccessibleName = "Browser sessions"
     };
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 3000 };
-    private readonly List<BrowserSession> sessions = [];
-    private HashSet<Guid> pendingCleanup = [];
-    private CoreWebView2Environment? environment;
-    private SavedBatch? batch;
-    private BrowserSession? selected;
     private bool changingRows;
     private bool busy;
     private bool exiting;
-    private bool stateLoaded;
-    private bool needsSave;
-    private string? stateError;
-    private string? cleanupError;
-    private string? logError;
 
     public LauncherForm(string directory)
     {
-        store = new BatchStore(directory);
+        live = new LauncherMode(directory);
+        offline = new LauncherMode(Path.Combine(directory, "Demo"), isDemo: true);
+        mode = live;
         BuildLayout();
+        AddSessionContextMenu();
 
         releaseUrl.TextChanged += (_, _) => RefreshControls();
         sessionList.SelectionChanged += (_, _) =>
@@ -66,18 +58,25 @@ sealed partial class LauncherForm : Form
         {
             if (MessageBox.Show(this, "Close all sessions and discard their saved browser data?",
                     "End batch", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK)
-                await RunAsync(() => RemoveAsync([.. sessions]));
+                await RunAsync(() => RemoveAsync([.. mode.Sessions]));
         };
         close.Click += async (_, _) =>
         {
-            if (selected is { } session) await RunAsync(() => RemoveAsync([session]));
+            if (mode.Selected is { } session) await RunAsync(() => RemoveAsync([session]));
         };
-        copy.Click += (_, _) => CopySelected();
+        copy.Click += (_, _) =>
+        {
+            if (mode.Selected is { } session) CopySession(session);
+        };
         copyClose.Click += async (_, _) =>
         {
-            if (selected is { } session && CopySelected()) await RunAsync(() => RemoveAsync([session]));
+            if (mode.Selected is { } session) await CopyAndCloseAsync(session);
         };
-        next.Click += (_, _) => SelectSession(sessions[(sessions.IndexOf(selected!) + 1) % sessions.Count]);
+        next.Click += (_, _) =>
+        {
+            var ordered = OrderedSessions();
+            SelectSession(ordered[(Array.IndexOf(ordered, mode.Selected) + 1) % ordered.Length]);
+        };
         mark.Click += (_, _) => ToggleReady();
         back.Click += (_, _) => BrowserAction(session => session.View.GoBack());
         reload.Click += (_, _) => BrowserAction(session =>
@@ -87,16 +86,35 @@ sealed partial class LauncherForm : Form
         });
         retry.Click += async (_, _) =>
         {
-            if (selected is { } session)
+            if (mode.Selected is { } session)
                 await RunAsync(async () => await session.RetryAsync(await GetEnvironmentAsync(), browserPane));
         };
         logs.Click += (_, _) => OpenLogs();
+        history.Click += (_, _) => OpenLinkHistory();
+        demo.Click += async (_, _) => await RunAsync(SwitchModeAsync);
+        sortByPosition.CheckedChanged += (_, _) =>
+        {
+            if (mode.Loaded && !switchingModes)
+            {
+                try { mode.Store.SaveSortPreference(sortByPosition.Checked); }
+                catch (Exception ex) when (IsStorageError(ex))
+                {
+                    ShowShareFeedback("Couldn’t save the sort preference.");
+                }
+            }
+            RefreshControls();
+        };
         Shown += async (_, _) =>
         {
             await RunAsync(RestoreAsync);
             if (!exiting) timer.Start();
         };
-        timer.Tick += async (_, _) => await PollAsync();
+        timer.Tick += async (_, _) =>
+        {
+            activePoll = PollAsync();
+            await activePoll;
+            activePoll = null;
+        };
         FormClosing += (_, args) =>
         {
             if (busy)
@@ -104,7 +122,7 @@ sealed partial class LauncherForm : Form
                 args.Cancel = true;
                 return;
             }
-            if (needsSave && !TrySave(batch))
+            if (mode.NeedsSave && !TrySave(mode.Batch))
             {
                 args.Cancel = MessageBox.Show(this, "Close without saving the latest changes?",
                     "Queue Launcher", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes;
@@ -112,12 +130,12 @@ sealed partial class LauncherForm : Form
             }
             exiting = true;
             timer.Dispose();
-            foreach (var session in sessions) session.Closed = true;
+            foreach (var session in live.Sessions.Concat(offline.Sessions)) session.Closed = true;
         };
         RefreshControls();
     }
 
-    private Uri? Destination => ParseDestination(releaseUrl.Text);
+    private Uri? Destination => mode.IsDemo ? BrowserSession.DemoUrl : ParseDestination(releaseUrl.Text);
 
     private static Uri? ParseDestination(string text)
     {
@@ -130,16 +148,23 @@ sealed partial class LauncherForm : Form
     }
 
     private async Task<CoreWebView2Environment> GetEnvironmentAsync() =>
-        environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: store.BrowserDirectory);
+        mode.Environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: mode.Store.BrowserDirectory);
 
     private async Task RestoreAsync()
     {
-        pendingCleanup = store.ReadCleanup();
-        var saved = store.ReadBatch();
-        stateLoaded = true;
+        mode.PendingCleanup = mode.Store.ReadCleanup();
+        var saved = mode.Store.ReadBatch();
+        try { sortByPosition.Checked = mode.Store.ReadSortPreference(); }
+        catch (Exception ex) when (IsStorageError(ex)) { ShowShareFeedback("Couldn’t load the sort preference."); }
+        mode.Loaded = true;
+        if (mode.IsDemo)
+        {
+            releaseUrl.Text = BrowserSession.DemoUrl.AbsoluteUri;
+            count.Value = 12;
+        }
         if (saved is { Sessions.Count: > 0 })
         {
-            batch = saved;
+            mode.Batch = saved;
             releaseUrl.Text = saved.Url.AbsoluteUri;
             count.Value = Math.Clamp(saved.Sessions.Count, 1, MaxSessions);
             Record("batch_restored");
@@ -150,20 +175,21 @@ sealed partial class LauncherForm : Form
 
     private async Task StartAsync()
     {
-        if (batch is not null || Destination is not { } destination) return;
+        if (mode.Batch is not null || Destination is not { } destination) return;
         var size = (int)count.Value;
         var saved = Enumerable.Range(1, size).Select(number => new SavedSession(Guid.NewGuid(), number)).ToList();
         var started = new SavedBatch(destination, Guid.NewGuid(), size + 1, 1, saved);
         await GetEnvironmentAsync();
         if (!TrySave(started)) return;
-        logError = null;
+        shareFeedback.Text = "";
+        mode.LogError = null;
         Record("batch_started");
         await OpenSessionsAsync(saved, 1);
     }
 
     private async Task AddAsync()
     {
-        if (batch is not { } current || sessions.Count >= MaxSessions) return;
+        if (mode.Batch is not { } current || mode.Sessions.Count >= MaxSessions) return;
         var saved = new SavedSession(Guid.NewGuid(), current.NextNumber);
         if (!TrySave(current with
             {
@@ -174,11 +200,13 @@ sealed partial class LauncherForm : Form
 
     private async Task OpenSessionsAsync(IEnumerable<SavedSession> saved, int? selection, bool restored = false)
     {
-        var current = batch!;
+        var owner = mode;
+        var current = mode.Batch!;
         var added = saved.Select(item => new BrowserSession(item, current.Url,
-            (name, code, ahead) => Record(name, item.Number, code, ahead), RefreshControls)).ToArray();
-        sessions.AddRange(added);
-        selected = sessions.FirstOrDefault(session => session.Saved.Number == selection) ?? sessions.FirstOrDefault();
+            (name, code, ahead) => Record(name, item.Number, code, ahead, current.LogId, owner),
+            RefreshControls, owner.IsDemo)).ToArray();
+        mode.Sessions.AddRange(added);
+        mode.Selected = mode.Sessions.FirstOrDefault(session => session.Saved.Number == selection) ?? mode.Sessions.FirstOrDefault();
         RebuildRows();
         foreach (var session in added)
             Record(restored ? "session_restored" : "session_opened", session.Saved.Number);
@@ -196,12 +224,12 @@ sealed partial class LauncherForm : Form
 
     private void SelectSession(BrowserSession session)
     {
-        if (selected == session) return;
-        selected = session;
-        if (batch is { } current)
+        if (mode.Selected == session) return;
+        mode.Selected = session;
+        if (mode.Batch is { } current)
         {
-            batch = current with { Selected = session.Saved.Number };
-            needsSave = !TrySave(batch);
+            mode.Batch = current with { Selected = session.Saved.Number };
+            mode.NeedsSave = !TrySave(mode.Batch);
         }
         UpdateSelection();
         RefreshControls();
@@ -209,9 +237,9 @@ sealed partial class LauncherForm : Form
 
     private void ToggleReady()
     {
-        if (selected is not { } session) return;
+        if (mode.Selected is not { } session) return;
         session.Saved.Ready = !session.Saved.Ready;
-        if (!TrySave(batch))
+        if (!TrySave(mode.Batch))
         {
             session.Saved.Ready = !session.Saved.Ready;
             return;
@@ -222,15 +250,21 @@ sealed partial class LauncherForm : Form
 
     private async Task RemoveAsync(BrowserSession[] removed)
     {
-        var current = batch!;
-        var remaining = sessions.Except(removed).ToList();
-        var selection = selected;
+        var current = mode.Batch!;
+        if (!CaptureQueueLinks()) return;
+        var remaining = mode.Sessions.Except(removed).ToList();
+        var selection = mode.Selected;
         if (selection is not null && removed.Contains(selection))
-            selection = remaining.Count == 0 ? null : remaining[Math.Min(sessions.IndexOf(selection), remaining.Count - 1)];
-        var scheduled = new HashSet<Guid>(pendingCleanup);
+        {
+            var ordered = OrderedSessions();
+            var index = Array.IndexOf(ordered, selection);
+            selection = ordered.Skip(index + 1).FirstOrDefault(session => !removed.Contains(session))
+                ?? ordered.Take(index).LastOrDefault(session => !removed.Contains(session));
+        }
+        var scheduled = new HashSet<Guid>(mode.PendingCleanup);
         scheduled.UnionWith(removed.Select(session => session.Saved.Profile));
-        store.SaveCleanup(scheduled);
-        pendingCleanup = scheduled;
+        mode.Store.SaveCleanup(scheduled);
+        mode.PendingCleanup = scheduled;
         if (!TrySave(remaining.Count == 0 ? null : current with
             {
                 Sessions = remaining.Select(session => session.Saved).ToList(), Selected = selection?.Saved.Number
@@ -242,22 +276,22 @@ sealed partial class LauncherForm : Form
             Record("session_closed", session.Saved.Number, batchId: current.LogId);
             try
             {
-                if (await session.DeleteProfileAsync()) pendingCleanup.Remove(session.Saved.Profile);
+                if (await session.DeleteProfileAsync()) mode.PendingCleanup.Remove(session.Saved.Profile);
             }
             catch (Exception ex) when (BrowserSession.IsBrowserError(ex)) { }
             finally { session.View.Dispose(); }
         }
         if (remaining.Count == 0) Record("batch_ended", batchId: current.LogId);
-        sessions.RemoveAll(removed.Contains);
-        selected = selection;
+        mode.Sessions.RemoveAll(removed.Contains);
+        mode.Selected = selection;
         RebuildRows();
         await CleanupAsync();
     }
 
     private async Task CleanupAsync()
     {
-        var active = sessions.Select(session => session.Saved.Profile).ToHashSet();
-        var remaining = pendingCleanup.Where(id => !active.Contains(id)).ToArray();
+        var active = mode.Sessions.Select(session => session.Saved.Profile).ToHashSet();
+        var remaining = mode.PendingCleanup.Where(id => !active.Contains(id)).ToArray();
         foreach (var id in remaining)
         {
             CoreWebView2Controller? controller = null;
@@ -267,34 +301,35 @@ sealed partial class LauncherForm : Form
                 controller = await browserEnvironment.CreateCoreWebView2ControllerAsync(Handle,
                     BrowserSession.ProfileOptions(browserEnvironment, id));
                 await BrowserSession.ClearAndDeleteAsync(controller.CoreWebView2.Profile);
-                pendingCleanup.Remove(id);
+                mode.PendingCleanup.Remove(id);
             }
             catch (COMException ex) when ((uint)ex.HResult == 0x8007012F)
             {
                 // WebView2 has already accepted the profile deletion.
-                pendingCleanup.Remove(id);
+                mode.PendingCleanup.Remove(id);
             }
             catch (Exception ex) when (BrowserSession.IsBrowserError(ex)) { }
             finally { controller?.Close(); }
         }
-        if (remaining.Length > 0 || Directory.Exists(store.BrowserDirectory)) store.SaveCleanup(pendingCleanup);
-        cleanupError = pendingCleanup.Any(id => !active.Contains(id))
+        if (remaining.Length > 0 || Directory.Exists(mode.Store.BrowserDirectory)) mode.Store.SaveCleanup(mode.PendingCleanup);
+        mode.CleanupError = mode.PendingCleanup.Any(id => !active.Contains(id))
             ? "Some browser profiles could not be cleared. Cleanup will retry when the app reopens."
             : null;
     }
 
     private async Task PollAsync()
     {
-        if (busy || exiting || sessions.Count == 0) return;
+        if (busy || exiting || mode.Sessions.Count == 0) return;
         timer.Stop();
-        var snapshot = sessions.ToArray();
+        var snapshot = mode.Sessions.ToArray();
         var urls = snapshot.Select(session => session.Saved.WaitingRoomUrl).ToArray();
         try
         {
             await Task.WhenAll(snapshot.Select(session => session.ObserveAsync()));
             if (exiting) return;
-            needsSave |= snapshot.Where((session, index) => !session.Closed && session.Saved.WaitingRoomUrl != urls[index]).Any();
-            if (needsSave && !busy) TrySave(batch);
+            if (!busy) CaptureQueueLinks();
+            mode.NeedsSave |= snapshot.Where((session, index) => !session.Closed && session.Saved.WaitingRoomUrl != urls[index]).Any();
+            if (mode.NeedsSave && !busy) TrySave(mode.Batch);
             RefreshControls();
         }
         finally
@@ -312,7 +347,7 @@ sealed partial class LauncherForm : Form
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException ||
             BrowserSession.IsBrowserError(ex))
         {
-            stateError = ex is WebView2RuntimeNotFoundException
+            mode.StateError = ex is WebView2RuntimeNotFoundException
                 ? "Install the Microsoft Edge WebView2 Runtime to open sessions."
                 : $"Queue Launcher couldn’t complete the operation. {ex.Message}";
         }
@@ -327,27 +362,29 @@ sealed partial class LauncherForm : Form
     {
         try
         {
-            store.SaveBatch(value);
-            batch = value;
-            needsSave = false;
-            stateError = null;
+            mode.Store.SaveBatch(value);
+            mode.Batch = value;
+            mode.NeedsSave = false;
+            mode.StateError = null;
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            stateError = "Couldn’t save the batch. Check that the app data folder is writable.";
+            mode.StateError = "Couldn’t save the batch. Check that the app data folder is writable.";
             RefreshControls();
             return false;
         }
     }
 
-    private void Record(string name, int? session = null, int? code = null, int? ahead = null, Guid? batchId = null)
+    private void Record(string name, int? session = null, int? code = null, int? ahead = null,
+        Guid? batchId = null, LauncherMode? owner = null)
     {
-        if ((batchId ?? batch?.LogId) is not { } id) return;
-        try { store.Log(id, name, session, code, ahead); }
+        owner ??= mode;
+        if ((batchId ?? owner.Batch?.LogId) is not { } id) return;
+        try { owner.Store.Log(id, name, session, code, ahead); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            logError = "Some drop log entries couldn’t be written.";
+            owner.LogError = "Some drop log entries couldn’t be written.";
         }
     }
 
@@ -355,19 +392,32 @@ sealed partial class LauncherForm : Form
     {
         try
         {
-            Directory.CreateDirectory(store.LogDirectory);
-            Process.Start(new ProcessStartInfo(store.LogDirectory) { UseShellExecute = true });
+            Directory.CreateDirectory(mode.Store.LogDirectory);
+            Process.Start(new ProcessStartInfo(mode.Store.LogDirectory) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            logError = "Couldn’t open the drop log folder.";
+            mode.LogError = "Couldn’t open the drop log folder.";
             RefreshControls();
         }
     }
 
-    private bool CopySelected()
+    private void CopySession(BrowserSession session)
     {
-        if (selected?.ShareUrl is not { } url) return false;
+        if (CopyLink(session)) ShowShareFeedback($"Copied Session {session.Saved.Number} link.");
+    }
+
+    private async Task CopyAndCloseAsync(BrowserSession session)
+    {
+        if (!CopyLink(session)) return;
+        await RunAsync(() => RemoveAsync([session]));
+        var result = mode.Sessions.Contains(session) ? "Session is still open." : "Session closed.";
+        ShowShareFeedback($"Copied Session {session.Saved.Number} link. {result}");
+    }
+
+    private bool CopyLink(BrowserSession session)
+    {
+        if (busy || session.ShareUrl is not { } url) return false;
         try { Clipboard.SetText(url.AbsoluteUri); }
         catch (ExternalException)
         {
@@ -377,9 +427,16 @@ sealed partial class LauncherForm : Form
         return true;
     }
 
+    private void ShowShareFeedback(string message)
+    {
+        shareFeedback.Text = message;
+        shareFeedback.Visible = true;
+        shareFeedback.AccessibilityObject.RaiseLiveRegionChanged();
+    }
+
     private void BrowserAction(Action<BrowserSession> action)
     {
-        if (selected is not { } session) return;
+        if (mode.Selected is not { } session) return;
         try { action(session); }
         catch (Exception ex) when (BrowserSession.IsBrowserError(ex))
         {
@@ -388,28 +445,46 @@ sealed partial class LauncherForm : Form
         }
     }
 
+    private BrowserSession[] OrderedSessions() => sortByPosition.Checked
+        ? mode.Sessions.OrderBy(session => session.Status?.Ahead is null)
+            .ThenBy(session => session.Status?.Ahead).ThenBy(session => session.Saved.Number).ToArray()
+        : mode.Sessions.ToArray();
+
     private void RebuildRows()
     {
+        SyncRows(OrderedSessions());
+        RefreshControls();
+    }
+
+    private void SyncRows(BrowserSession[] ordered)
+    {
+        if (sessionList.Rows.Cast<DataGridViewRow>().Select(row => row.Tag).SequenceEqual(ordered)) return;
         changingRows = true;
+        var first = sessionList.FirstDisplayedScrollingRowIndex;
+        var anchor = first < 0 ? null : sessionList.Rows[first].Tag as BrowserSession;
         sessionList.Rows.Clear();
-        foreach (var session in sessions)
+        foreach (var session in ordered)
         {
             var index = sessionList.Rows.Add("");
             sessionList.Rows[index].Tag = session;
         }
-        changingRows = false;
+        var anchorIndex = Array.IndexOf(ordered, anchor);
+        if (anchorIndex >= 0 && sessionList.Visible)
+            sessionList.FirstDisplayedScrollingRowIndex = anchorIndex;
         UpdateSelection();
-        RefreshControls();
     }
 
     private void UpdateSelection()
     {
         changingRows = true;
-        var index = selected is null ? -1 : sessions.IndexOf(selected);
-        if (index >= 0 && !sessionList.Rows[index].Selected)
+        var row = mode.Selected is null ? null : sessionList.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => row.Tag == mode.Selected);
+        if (row is not null)
         {
-            sessionList.CurrentCell = sessionList.Rows[index].Cells[0];
-            sessionList.Rows[index].Selected = true;
+            if (sessionList.CurrentCell?.RowIndex != row.Index)
+                sessionList.CurrentCell = row.Cells[0];
+            row.Selected = true;
+            if (sessionList.Visible && !row.Displayed)
+                sessionList.FirstDisplayedScrollingRowIndex = row.Index;
         }
         changingRows = false;
     }
@@ -417,7 +492,8 @@ sealed partial class LauncherForm : Form
     private void RefreshControls()
     {
         if (exiting) return;
-        var best = sessions.Min(session => session.Status?.Ahead);
+        SyncRows(OrderedSessions());
+        var best = mode.Sessions.Min(session => session.Status?.Ahead);
         foreach (DataGridViewRow row in sessionList.Rows)
         {
             var session = (BrowserSession)row.Tag!;
@@ -429,14 +505,15 @@ sealed partial class LauncherForm : Form
             if (status?.EstimatedWait is { } wait) lines.Add($"Estimated wait {wait}");
             if (status?.TimeRemaining is { } left) lines.Add($"{left} left");
             else if (status?.PurchaseWindow is { } window) lines.Add($"{window} once admitted");
+            if (session.ShareUrl is not null) lines.Add("Share link available");
             var text = string.Join(Environment.NewLine, lines);
             if (!Equals(row.Cells[0].Value, text)) row.Cells[0].Value = text;
             var height = SessionRowHeight(row, lines);
             if (row.Height != height) row.Height = height;
         }
 
-        var active = selected;
-        foreach (var session in sessions)
+        var active = mode.Selected;
+        foreach (var session in mode.Sessions)
         {
             if (session.View.IsDisposed) continue;
             session.View.Visible = session == active && !session.Opening && session.Error is null &&
@@ -444,20 +521,26 @@ sealed partial class LauncherForm : Form
         }
         placeholder.Visible = active is null || !active.View.Visible;
         RefreshLayout(active);
+        if (active is not null && busy) UpdateSelection();
         retry.Visible = active?.Error is not null;
         retry.Enabled = !busy;
         if (placeholder.Visible) placeholder.BringToFront();
-        releaseUrl.Enabled = count.Enabled = stateLoaded && !busy && batch is null;
-        open.Enabled = releaseUrl.Enabled && Destination is not null;
-        add.Enabled = !busy && batch is not null && sessions.Count < MaxSessions;
-        end.Enabled = !busy && sessions.Count > 0;
-        next.Enabled = !busy && sessions.Count > 1;
+        releaseUrl.Enabled = !mode.IsDemo && mode.Loaded && !busy && mode.Batch is null;
+        count.Enabled = mode.Loaded && !busy && mode.Batch is null;
+        open.Enabled = count.Enabled && Destination is not null;
+        add.Enabled = !busy && mode.Batch is not null && mode.Sessions.Count < MaxSessions;
+        history.Enabled = !busy;
+        demo.Enabled = mode.Loaded && !busy;
+        end.Enabled = !busy && mode.Sessions.Count > 0;
+        next.Enabled = !busy && mode.Sessions.Count > 1;
         close.Enabled = mark.Enabled = !busy && active is not null;
         copy.Enabled = copyClose.Enabled = !busy && active?.ShareUrl is not null;
+        copy.AccessibleName = active is null ? copy.Text : $"Copy link for Session {active.Saved.Number}";
+        copyClose.AccessibleName = active is null ? copyClose.Text : $"Copy link and close Session {active.Saved.Number}";
         back.Enabled = !busy && active?.CanGoBack == true;
         reload.Enabled = !busy && active is { Error: null, Opening: false } && active.View.CoreWebView2 is not null;
         mark.Text = active?.Saved.Ready == true ? "Mark pending" : "Mark ready";
-        notice.Text = string.Join("  ", new[] { stateError, cleanupError, logError }.OfType<string>());
+        notice.Text = string.Join("  ", new[] { mode.StateError, mode.CleanupError, mode.LogError, mode.HistoryError }.OfType<string>());
         notice.Visible = notice.Text.Length > 0;
     }
 
