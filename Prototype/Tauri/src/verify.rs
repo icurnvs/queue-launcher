@@ -161,6 +161,23 @@ impl Check {
         }
         println!("PASS relaunch restores both UUID-backed stores and the saved link");
 
+        #[cfg(target_os = "windows")]
+        let deleted = ids[0];
+        #[cfg(target_os = "windows")]
+        let named = on_main(&self.app, move |_, launcher| {
+            if launcher.named_profiles {
+                let path = crate::named_profiles::profile_path(deleted)?;
+                ensure(
+                    path.is_dir(),
+                    "named profile directory did not exist before close",
+                )?;
+                crate::write_json(
+                    &launcher.root.join("deleted-profile.json"),
+                    &(deleted, path),
+                )?;
+            }
+            Ok(launcher.named_profiles)
+        })?;
         self.close(ids[0])?;
         let remaining = self.report_after(ids[1], "window.fixtureReport()")?;
         ensure(
@@ -168,13 +185,27 @@ impl Check {
                 && remaining.page == restored[&ids[1]].page,
             "closing the first session changed the second",
         )?;
-        let deleted = ids[0];
+        #[cfg(target_os = "windows")]
+        if named {
+            println!("PASS close clears and marks the named profile for deletion; the other page and link survive");
+            return Ok(());
+        }
+        self.probe_deleted(ids[0])?;
+        println!("PASS closing removes the selected store; the other page and link survive");
+        Ok(())
+    }
+
+    fn probe_deleted(&self, deleted: Uuid) -> Result<()> {
         on_main(&self.app, move |window, launcher| {
             let view = launcher.create_view(window, deleted)?;
             // Track this probe separately so normal close can journal its removal too.
             launcher.views.push((deleted, view));
             Ok(())
         })?;
+        self.check_clean_store(deleted)
+    }
+
+    fn check_clean_store(&self, deleted: Uuid) -> Result<()> {
         let fresh = self.collect(&[deleted])?.remove(&deleted).unwrap();
         ensure(
             !fresh.had_cookie && !fresh.had_storage,
@@ -187,7 +218,60 @@ impl Check {
                 "closing lost the saved sample link",
             )
         })?;
-        println!("PASS closing removes the selected store; the other page and link survive");
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    fn verify_named_deletion(&self) -> Result<()> {
+        let (deleted, path) = on_main(&self.app, |_, launcher| {
+            ensure(
+                launcher.named_profiles,
+                "named profile verification requires named mode",
+            )?;
+            crate::read_json::<Option<(Uuid, std::path::PathBuf)>>(
+                &launcher.root.join("deleted-profile.json"),
+            )?
+            .ok_or("missing deleted profile observation".into())
+        })?;
+        let start = Instant::now();
+        while path.try_exists()? {
+            ensure(
+                start.elapsed() < Duration::from_secs(10),
+                "named profile directory still exists after relaunch",
+            )?;
+            thread::sleep(Duration::from_millis(100));
+        }
+        let remaining = self.ids()?;
+        ensure(
+            remaining.len() == 1,
+            "relaunch should restore only the surviving session",
+        )?;
+        let reports = self.collect(&remaining)?;
+        let old = on_main(&self.app, |_, launcher| read_observations(&launcher.root))?;
+        let survivor = &reports[&remaining[0]];
+        ensure(
+            old.get(&remaining[0]) == Some(&(survivor.storage, survivor.cookie)),
+            "surviving named profile changed after relaunch",
+        )?;
+        let rejected = on_main(&self.app, move |window, launcher| {
+            match launcher.create_view(window, deleted) {
+                Ok(view) => {
+                    launcher.views.push((deleted, view));
+                    Ok(false)
+                }
+                Err(error) if crate::named_profiles::deletion_pending(error.as_ref()) => Ok(true),
+                Err(error) => Err(error),
+            }
+        })?;
+        println!("PASS the named profile directory is gone after browser exit and the surviving profile persisted");
+        let probe = if rejected {
+            println!("OBSERVED WebView2 still rejects reuse of the deleted name with ERROR_DELETE_PENDING");
+            self.add(1)?;
+            *self.ids()?.last().ok_or("missing fresh profile")?
+        } else {
+            deleted
+        };
+        self.check_clean_store(probe)?;
         Ok(())
     }
 
@@ -249,11 +333,11 @@ pub fn run(app: AppHandle, reports: Receiver<Report>, mode: String, start: Insta
         let result = match mode.as_str() {
             "--verify-initial" => check.initial(),
             "--verify-reopen" => check.reopen(),
+            #[cfg(target_os = "windows")]
+            "--verify-named-deletion" => check.verify_named_deletion(),
             "--verify-12" => check.scale(12, start),
             "--verify-50" => check.scale(50, start),
-            _ => {
-                Err("expected --verify-initial, --verify-reopen, --verify-12 or --verify-50".into())
-            }
+            _ => Err("unknown verification mode".into()),
         };
         if let Err(error) = result {
             eprintln!("FAIL: {error}");

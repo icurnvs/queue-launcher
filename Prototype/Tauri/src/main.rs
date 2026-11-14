@@ -12,6 +12,8 @@ use tauri::{
 use uuid::Uuid;
 
 mod fixture;
+#[cfg(target_os = "windows")]
+mod named_profiles;
 mod verify;
 
 const WIDTH: f64 = 960.0;
@@ -29,11 +31,49 @@ struct Saved {
     pending_removal: Vec<Uuid>,
 }
 
+enum SessionView {
+    Tauri(Webview),
+    #[cfg(target_os = "windows")]
+    Named(Uuid),
+}
+
+impl SessionView {
+    fn set_visible(&self, visible: bool) -> Result<()> {
+        match self {
+            Self::Tauri(view) if visible => Ok(view.show()?),
+            Self::Tauri(view) => Ok(view.hide()?),
+            #[cfg(target_os = "windows")]
+            Self::Named(id) => named_profiles::set_visible(*id, visible),
+        }
+    }
+
+    fn eval(&self, script: &str) -> Result<()> {
+        match self {
+            Self::Tauri(view) => Ok(view.eval(script)?),
+            #[cfg(target_os = "windows")]
+            Self::Named(id) => named_profiles::eval(*id, script),
+        }
+    }
+
+    fn discard(&self) -> Result<()> {
+        match self {
+            Self::Tauri(view) => Ok(view.close()?),
+            #[cfg(target_os = "windows")]
+            Self::Named(id) => {
+                named_profiles::discard(*id);
+                Ok(())
+            }
+        }
+    }
+}
+
 struct Launcher {
+    #[cfg(target_os = "windows")]
+    named_profiles: bool,
     root: PathBuf,
     saved: Saved,
     links: Vec<String>,
-    views: Vec<(Uuid, Webview)>,
+    views: Vec<(Uuid, SessionView)>,
     selected: Option<Uuid>,
     fixture_url: tauri::Url,
     verifying: bool,
@@ -85,7 +125,18 @@ impl Launcher {
         }
     }
 
-    fn create_view(&self, window: &Window, id: Uuid) -> Result<Webview> {
+    fn create_view(&self, window: &Window, id: Uuid) -> Result<SessionView> {
+        #[cfg(target_os = "windows")]
+        if self.named_profiles {
+            named_profiles::create(
+                window,
+                &self.root,
+                id,
+                self.fixture_url.as_str(),
+                self.verifying,
+            )?;
+            return Ok(SessionView::Named(id));
+        }
         let url = self.fixture_url.clone();
         let mut builder =
             WebviewBuilder::new(format!("session-{id}"), WebviewUrl::External(url.clone()))
@@ -109,7 +160,7 @@ impl Launcher {
             LogicalSize::new(WIDTH, HEIGHT - TOOLBAR),
         )?;
         view.hide()?;
-        Ok(view)
+        Ok(SessionView::Tauri(view))
     }
 
     fn select(&mut self, id: Uuid) -> Result<()> {
@@ -126,9 +177,9 @@ impl Launcher {
             .iter()
             .find(|(other, _)| Some(*other) == self.selected)
         {
-            previous.hide()?;
+            previous.set_visible(false)?;
         }
-        target.show()?;
+        target.set_visible(true)?;
         self.selected = Some(id);
         Ok(())
     }
@@ -143,7 +194,7 @@ impl Launcher {
             let mut saved = self.saved.clone();
             saved.sessions.push(id);
             if let Err(error) = self.save(saved.clone()) {
-                view.close()?;
+                view.discard()?;
                 return Err(error);
             }
             self.saved = saved;
@@ -167,10 +218,18 @@ impl Launcher {
         saved.sessions.retain(|other| *other != id);
         saved.pending_removal.push(id);
         self.save(saved.clone())?;
-        if let Err(error) = self.views[index].1.close() {
-            self.save(self.saved.clone())?;
-            return Err(error.into());
-        }
+        let view = &self.views[index].1;
+        let named_outcome: Option<Result<()>> = match *view {
+            #[cfg(target_os = "windows")]
+            SessionView::Named(id) => Some(named_profiles::close(id, self.verifying)),
+            SessionView::Tauri(_) => {
+                if let Err(error) = view.discard() {
+                    self.save(self.saved.clone())?;
+                    return Err(error);
+                }
+                None
+            }
+        };
         self.saved = saved;
         self.views.remove(index);
         if self.selected == Some(id) {
@@ -179,8 +238,28 @@ impl Launcher {
                 self.select(*next)?;
             }
         }
-        remove_store(window.app_handle().clone(), self.root.clone(), id);
+        match named_outcome {
+            Some(outcome) => self.finish_cleanup(id, outcome.map_err(|error| error.to_string())),
+            None => remove_store(window.app_handle().clone(), self.root.clone(), id),
+        }
         Ok(())
+    }
+
+    fn finish_cleanup(&mut self, id: Uuid, outcome: Reply<()>) {
+        if let Err(error) = outcome {
+            self.cleanup_error = Some(error);
+            return;
+        }
+        let mut saved = self.saved.clone();
+        saved.pending_removal.retain(|other| *other != id);
+        if let Err(error) = self.save(saved.clone()) {
+            self.cleanup_error = Some(error.to_string());
+        } else {
+            self.saved = saved;
+            if self.saved.pending_removal.is_empty() {
+                self.cleanup_error = None;
+            }
+        }
     }
 
     fn save_link(&mut self) -> Result<()> {
@@ -215,21 +294,7 @@ fn on_main<T: Send + 'static>(
 
 fn record_cleanup(app: &AppHandle, id: Uuid, outcome: Reply<()>) {
     let _ = on_main(app, move |_, launcher| {
-        match outcome {
-            Ok(()) => {
-                let mut saved = launcher.saved.clone();
-                saved.pending_removal.retain(|other| *other != id);
-                if let Err(error) = launcher.save(saved.clone()) {
-                    launcher.cleanup_error = Some(error.to_string());
-                } else {
-                    launcher.saved = saved;
-                    if launcher.saved.pending_removal.is_empty() {
-                        launcher.cleanup_error = None;
-                    }
-                }
-            }
-            Err(error) => launcher.cleanup_error = Some(error),
-        }
+        launcher.finish_cleanup(id, outcome);
         Ok(())
     });
 }
@@ -330,7 +395,10 @@ fn main() {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     compile_error!("This prototype targets Windows and macOS.");
 
-    let verification = std::env::args().nth(1);
+    let mut args = std::env::args().skip(1).peekable();
+    #[cfg(target_os = "windows")]
+    let named_profiles = args.next_if(|arg| arg == "--named-profiles").is_some();
+    let verification = args.next();
     let start = Instant::now();
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![launcher])
@@ -338,6 +406,12 @@ fn main() {
             let root = match std::env::var_os("QUEUE_TAURI_PROTOTYPE_DATA") {
                 Some(root) => PathBuf::from(root),
                 None => app.path().app_local_data_dir()?.join("prototype"),
+            };
+            #[cfg(target_os = "windows")]
+            let root = if named_profiles {
+                root.join("named-profiles")
+            } else {
+                root
             };
             fs::create_dir_all(&root)?;
             let saved: Saved = read_json(&root.join("sessions.json"))?;
@@ -359,6 +433,8 @@ fn main() {
                 LogicalSize::new(WIDTH, TOOLBAR),
             )?;
             let mut launcher = Launcher {
+                #[cfg(target_os = "windows")]
+                named_profiles,
                 root,
                 saved,
                 links,
@@ -375,7 +451,16 @@ fn main() {
             if let Some((id, _)) = launcher.views.first() {
                 launcher.select(*id)?;
             }
+            #[cfg(target_os = "windows")]
+            if named_profiles {
+                for id in launcher.saved.pending_removal.clone() {
+                    let outcome = named_profiles::retry_delete(&window, &launcher.root, id);
+                    launcher.finish_cleanup(id, outcome.map_err(|error| error.to_string()));
+                }
+            }
             let pending = launcher.saved.pending_removal.clone();
+            #[cfg(target_os = "windows")]
+            let pending = if named_profiles { vec![] } else { pending };
             let root = launcher.root.clone();
             app.manage(Mutex::new(launcher));
             for id in pending {

@@ -1,4 +1,4 @@
-param([switch]$SkipBuild)
+param([switch]$SkipBuild, [switch]$NamedProfiles)
 
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -52,8 +52,14 @@ try {
     $exe = (Resolve-Path './target/debug/queue-launcher-tauri-prototype.exe').Path
     $scratch = Join-Path ([IO.Path]::GetTempPath()) ('queue-tauri-' + [guid]::NewGuid())
     $env:QUEUE_TAURI_PROTOTYPE_DATA = Join-Path $scratch 'baseline'
-    foreach ($mode in 'initial', 'reopen') {
-        & $exe "--verify-$mode"
+    $flags = @()
+    $modes = @('initial', 'reopen')
+    if ($NamedProfiles) {
+        $flags += '--named-profiles'
+        $modes += 'named-deletion'
+    }
+    foreach ($mode in $modes) {
+        & $exe @flags "--verify-$mode"
         if ($LASTEXITCODE) { throw "Verification failed at $mode" }
     }
 
@@ -62,7 +68,7 @@ try {
         $null = New-Item -ItemType Directory -Path $env:QUEUE_TAURI_PROTOTYPE_DATA -Force
         $output = Join-Path $scratch "scale-$count.out"
         $errors = Join-Path $scratch "scale-$count.err"
-        $launcher = Start-Process $exe "--verify-$count" -PassThru -WindowStyle Normal -RedirectStandardOutput $output -RedirectStandardError $errors
+        $launcher = Start-Process $exe ($flags + "--verify-$count") -PassThru -WindowStyle Normal -RedirectStandardOutput $output -RedirectStandardError $errors
         $null = $launcher.Handle # Keep the handle so ExitCode survives process exit.
         $measured = $false
         try {
@@ -84,7 +90,8 @@ try {
                     $children = @($processes | Where-Object { $tracked.Contains($_.Id) })
                     if ($browser.Count -eq 0) { throw 'Could not sample the WebView2 process tree' }
                     $memory = (Get-Process -Id $children.Id -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum
-                    $files = Get-ChildItem -LiteralPath (Join-Path $env:QUEUE_TAURI_PROTOTYPE_DATA 'profiles') -File -Recurse
+                    $profilePath = if ($NamedProfiles) { 'named-profiles/webview2' } else { 'profiles' }
+                    $files = Get-ChildItem -LiteralPath (Join-Path $env:QUEUE_TAURI_PROTOTYPE_DATA $profilePath) -File -Recurse
                     $profileBytes = ($files | Measure-Object Length -Sum).Sum
                     "WebView2 for ${count} views - $($browser.Count) browser processes, $($children.Count) total, $([Math]::Round($memory/1MB)) MiB summed working set, $([Math]::Round($profileBytes/1MB)) MiB profile files"
                     $measured = $true

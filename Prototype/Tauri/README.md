@@ -48,9 +48,9 @@ macOS 14+ on a logged-in desktop:
 sh ./verify-macos.sh
 ```
 
-Both scripts run an initial two-view process, relaunch the same session IDs
-in a second process, verify deletion by reopening the same UUID, and run
-fresh 12- and 50-view batches. They print the scratch path at the end. When
+By default each script runs an initial two-view process, relaunches with
+the same session IDs, verifies deletion by reopening the same UUID, and
+runs fresh 12- and 50-view batches. They print the scratch path at the end. When
 finished, the Windows scratch files can be removed. On macOS, WebKit stores
 are managed by UUID outside the scratch directory. Close test sessions in
 the launcher using the appropriate scratch path to remove their stores.
@@ -85,24 +85,54 @@ the other. The fixture had no access to the launcher command, and the
 sample link survived both relaunch and deletion. The launcher UI was
 also exercised interactively for adding sessions, switching, and saving a link.
 
-| Fixture views | All views ready | Switch and fixture round trip | Browser processes | Total WebView2 processes | Profile files |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 12 | 7.05 s | 25-43 ms | 13 | 78 | 65 MiB |
-| 50 | 33.73 s | 18-75 ms | 51 | 306 | 276 MiB |
+Both modes passed the same isolation, switching, relaunch, and cleanup
+checks on Windows. These are consecutive runs from the same debug build,
+with a fresh data root for each scale run.
 
-Ready time runs from application start until every fixture has reported
-its cookie and local-storage marker. Process counts include the launcher
-webview. A separate 50-view run took 40.24 s to reach readiness. No hard
-limit was observed through 50 fixture views. The process tree grows by
-roughly six processes per session with this directory-per-view approach.
+| Storage mode | Fixture views | Created | All views ready | Switch and fixture round trip | Browser processes | Total WebView2 processes | Profile files |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Per-session directories | 12 | 6.03 s | 6.16 s | 17-36 ms | 13 | 78 | 70 MiB |
+| Named profiles | 12 | 3.01 s | 3.77 s | 16-28 ms | 2 | 23 | 42 MiB |
+| Per-session directories | 50 | 25.52 s | 25.60 s | 27-78 ms | 51 | 306 | 280 MiB |
+| Named profiles | 50 | 10.13 s | 11.80 s | 24-62 ms | 2 | 61 | 171 MiB |
 
-The Windows sampler observed 2,420 MiB summed working set at 12 views and
-1,470 MiB at 50. These are point-in-time resident-page sums that can count
-shared pages more than once. The lower snapshot at 50 does not establish a
-smaller memory requirement. WebView2 printed a window-class cleanup
-diagnostic on shutdown while the verification processes returned success.
+Creation and readiness times start at application launch. Readiness is
+when every fixture has reported its storage markers. Process counts
+include the launcher webview. Named mode had one browser process for the
+launcher and one for the shared session folder at both sizes. Previous
+directory-mode runs reached 50 views in 33.73 s and 40.24 s, so treat
+these timings as observations from this host.
 
-The Windows result establishes feasibility for this local workload. The
-50-view startup time and process count are material costs of this isolation
-strategy. Compare with the existing named WebView2 profile approach and run
-the native macOS checks before deciding on a production migration.
+At 50 views, summed working-set snapshots were 2,735 MiB for directories
+and 3,126 MiB for named profiles. Summing working sets can count shared
+pages more than once. These snapshots do not establish a memory saving.
+WebView2 printed its window-class cleanup diagnostic at shutdown in both
+modes while the verification processes returned success.
+
+## Windows named profiles
+
+Run `cargo run --locked -- --named-profiles` to try the second Windows storage
+mode. It keeps its sessions and sample links under the `named-profiles`
+subdirectory of the prototype data root. Each session UUID becomes a WebView2
+profile name in one shared user data folder. The launcher keeps its own
+WebView2 environment and its existing Tauri permissions. The session panes
+use Wry's Windows profile option directly because Tauri 2.12.5 does not
+forward it through its child-webview builder. The fixture panes have no
+launcher IPC handler.
+
+Run both modes from the same build on Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -NamedProfiles
+powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -SkipBuild
+```
+
+On close, WebView2 clears the session profile's browsing data, then marks
+the profile for deletion. The test reads the fixture's cookies and local
+storage back after clearing, verifies that the other session's data and
+in-memory page survive, and verifies after relaunch that the deleted
+profile's directory is gone. On this runtime, reopening the old name
+still returned `ERROR_DELETE_PENDING` after the directory disappeared.
+The test checks that a fresh UUID starts with empty storage. Normal
+session creation always uses a new UUID.
+[WebView2 profile deletion documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile8?view=webview2-1.0.3912.50)
