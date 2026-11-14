@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local waiting room</title>
+<style>
+  body { font: 16px system-ui; color: #1a3028; background: #f2f6f3; margin: 3rem auto; max-width: 38rem; padding: 0 1rem; }
+  code { font: 14px monospace; }
+  dt { margin-top: 1rem; }
+  dd { margin: .3rem 0; }
+  button { font: inherit; padding: .4rem .65rem; }
+</style>
+<h1>Local waiting room</h1>
+<label><input id="admitted" type="checkbox"> Join the sample queue</label>
+<dl>
+  <dt>Queue ID (local storage)</dt><dd><code id="storage"></code></dd>
+  <dt>Cookie marker</dt><dd><code id="cookie"></code></dd>
+  <dt>Page load marker</dt><dd><code id="page"></code></dd>
+</dl>
+<button id="increment">Increment in-memory counter</button>
+<output id="counter">0</output>
+<script>
+  const byId = id => document.getElementById(id);
+  const stored = localStorage.getItem('local-queue-id');
+  const existingCookie = document.cookie.split('; ')
+    .find(entry => entry.startsWith('fixture='))?.slice('fixture='.length);
+  const storage = stored ?? crypto.randomUUID();
+  const cookie = existingCookie ?? crypto.randomUUID();
+  const page = crypto.randomUUID();
+  localStorage.setItem('local-queue-id', storage);
+  document.cookie = 'fixture=' + cookie + '; Path=/; Max-Age=604800; SameSite=Strict';
+  const readCookie = () => document.cookie.split('; ')
+    .find(entry => entry.startsWith('fixture='))?.slice('fixture='.length);
+  byId('storage').textContent = storage;
+  byId('cookie').textContent = readCookie() ?? 'Unavailable';
+  byId('page').textContent = page;
+  byId('admitted').checked = localStorage.getItem('fixture-admitted') === 'true';
+  byId('admitted').onchange = event => localStorage.setItem('fixture-admitted', event.target.checked);
+  let counter = 0;
+  byId('increment').onclick = () => { byId('counter').value = ++counter; };
+
+  if (window.fixtureSession) {
+    let bridgeDenied = false;
+    window.fixtureReport = () => fetch('/report', {
+      method: 'POST',
+      body: JSON.stringify({
+        session: window.fixtureSession, storage, cookie: readCookie(),
+        had_storage: Boolean(stored), had_cookie: Boolean(existingCookie),
+        page, counter, bridge_denied: bridgeDenied
+      })
+    });
+    (async () => {
+      try {
+        await Promise.race([
+          window.__TAURI_INTERNALS__.invoke('launcher', { action: { kind: 'status' } }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('IPC unavailable')), 2000))
+        ]);
+      } catch {
+        bridgeDenied = true;
+      }
+      await window.fixtureReport();
+    })();
+  }
+</script>
+</html>

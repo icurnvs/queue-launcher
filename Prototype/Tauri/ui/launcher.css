@@ -1,0 +1,7 @@
+* { box-sizing: border-box; }
+body { margin: 0; padding: 14px 20px; font: 14px system-ui; color: #1a3028; }
+header, form { display: flex; align-items: center; gap: 10px; }
+h1 { margin: 0 12px 0 0; font-size: 21px; white-space: nowrap; }
+input, select, button { font: inherit; padding: 4px 7px; }
+input { width: 54px; }
+#feedback, #links { margin-top: 7px; }

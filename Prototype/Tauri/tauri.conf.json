@@ -1,0 +1,13 @@
+{
+  "productName": "Queue Launcher Tauri Prototype",
+  "version": "0.1.0",
+  "identifier": "local.queue-launcher.tauri-prototype",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": { "active": false, "macOS": { "minimumSystemVersion": "14.0" } }
+}

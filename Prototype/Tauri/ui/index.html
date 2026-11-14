@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queue Launcher Prototype</title>
+<link rel="stylesheet" href="launcher.css">
+<script defer src="launcher.js"></script>
+<header>
+  <h1>Queue Launcher</h1>
+  <form id="add">
+    <label>Sessions to add <input id="count" type="number" min="1" max="50" value="2" required></label>
+    <button>Add</button>
+  </form>
+  <label>Session <select id="session"></select></label>
+  <button id="close">Close session</button>
+  <button id="save">Save sample link</button>
+</header>
+<div id="feedback" role="status"></div>
+<div id="links"></div>
+</html>
