@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>Queue Launcher Prototype</title>
+  <link rel="stylesheet" href="launcher.css">
+  <script defer src="launcher.js"></script>
+</head>
+<body>
+  <h1>Queue Launcher</h1>
+  <button id="add" type="button">Add session</button>
+  <button id="saveLink" type="button">Save sample link</button>
+  <button id="close" type="button">Close selected session</button>
+  <p id="saved"></p>
+  <p id="error" role="alert"></p>
+  <h2>Sessions <span id="count"></span></h2>
+  <div id="sessions" aria-label="Sessions"></div>
+</body>
+</html>

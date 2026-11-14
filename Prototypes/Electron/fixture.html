@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Waiting Room</title>
+  <style>
+    body { font: 18px system-ui; max-width: 36rem; margin: 2rem auto; padding: 1rem; }
+    code { overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Local Waiting Room</h1>
+  <p>Queue ID: <code id="queue-id"></code></p>
+  <label><input id="human" type="checkbox"> I'm human (local test)</label>
+  <p id="status" role="status">Waiting for manual verification</p>
+  <p>Fixture cookie: <code id="cookie"></code></p>
+  <button id="increment" type="button">Increment page-only counter</button>
+  <output id="counter">0</output>
+  <section id="details" hidden>
+    <p>Members ahead of you: <span id="ahead"></span></p>
+    <p>Estimated time to enter: 34 minutes</p>
+    <p>When it's your turn, you'll have 10 minutes to complete your purchase.</p>
+  </section>
+  <script>
+    const cookieName = 'fixture-cookie';
+    const cookie = document.cookie.split('; ').find(item => item.startsWith(cookieName + '='))
+      ?.slice(cookieName.length + 1) || crypto.randomUUID();
+    document.cookie = cookieName + '=' + cookie + '; Path=/; Max-Age=86400; SameSite=Strict';
+    document.querySelector('#cookie').textContent = cookie;
+
+    let clicks = 0;
+    document.querySelector('#increment').onclick = () => {
+      document.querySelector('#counter').textContent = ++clicks;
+    };
+    const key = 'local-queue-id';
+    const id = localStorage.getItem(key) || crypto.randomUUID();
+    localStorage.setItem(key, id);
+    document.querySelector('#queue-id').textContent = id;
+    document.title = `Local Waiting Room | ${id.slice(0, 8)}`;
+
+    const checkbox = document.querySelector('#human');
+    const status = document.querySelector('#status');
+    const details = document.querySelector('#details');
+    document.querySelector('#ahead').textContent =
+      Number.parseInt(id.slice(0, 6), 16).toLocaleString('en-US');
+    checkbox.checked = (localStorage.getItem('fixture-admitted') ?? 'false') === 'true';
+    function showStatus() {
+      status.textContent = checkbox.checked
+        ? 'In the waiting room'
+        : 'Waiting for manual verification';
+      details.hidden = !checkbox.checked;
+    }
+    showStatus();
+    checkbox.addEventListener('change', () => {
+      localStorage.setItem('fixture-admitted', checkbox.checked);
+      showStatus();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+:root { color-scheme: light dark; font: 14px system-ui, sans-serif; }
+body { margin: 0; padding: 16px; }
+h1 { font-size: 19px; margin: 0 0 16px; }
+h2 { font-size: 15px; margin: 16px 0 8px; }
+button { display: block; width: 100%; padding: 7px 8px; margin-bottom: 6px; text-align: left; }
+button[aria-pressed="true"] { font-weight: bold; outline: 2px solid Highlight; outline-offset: -2px; }
+p { overflow-wrap: anywhere; }
+p:empty { display: none; }
