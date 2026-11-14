@@ -147,8 +147,13 @@ sealed partial class LauncherForm : Form
         return uri.Scheme is "http" or "https" && uri.Host.Length > 0 ? uri : null;
     }
 
-    private async Task<CoreWebView2Environment> GetEnvironmentAsync() =>
-        mode.Environment ??= await CoreWebView2Environment.CreateAsync(userDataFolder: mode.Store.BrowserDirectory);
+    private async Task<CoreWebView2Environment> GetEnvironmentAsync()
+    {
+        var bundledRuntime = Path.Combine(AppContext.BaseDirectory, "WebView2Runtime");
+        return mode.Environment ??= await CoreWebView2Environment.CreateAsync(
+            browserExecutableFolder: Directory.Exists(bundledRuntime) ? bundledRuntime : null,
+            userDataFolder: mode.Store.BrowserDirectory);
+    }
 
     private async Task RestoreAsync()
     {

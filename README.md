@@ -8,7 +8,15 @@ Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to bu
 dotnet run --project Windows/QueueLauncher.csproj
 ```
 
-To publish a portable Windows x64 build with .NET included:
+To package a Windows x64 ZIP with .NET and the browser runtime included, download Microsoft's [WebView2 Fixed Version x64 CAB](https://developer.microsoft.com/microsoft-edge/webview2/) and run:
+
+```powershell
+.\Scripts\package-windows.ps1 -RuntimeCab 'C:\path\to\Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab'
+```
+
+Extract the entire ZIP to a local folder. On Windows 11, run **QueueLauncher.exe**. On Windows 10, run **Open on Windows 10.cmd** once to grant the browser sandbox read access to the bundled runtime folder and launch the app. For an ARM64 package, use an ARM64 CAB and pass `-Architecture arm64 -OutputDirectory build/windows-arm64-portable`. Repackage with a newer Fixed Version CAB to update its Chromium engine.
+
+To publish a smaller build that uses the PC’s installed Evergreen WebView2 Runtime:
 
 ```powershell
 dotnet publish Windows/QueueLauncher.csproj -c Release -r win-x64 --self-contained true -o build/windows-x64
