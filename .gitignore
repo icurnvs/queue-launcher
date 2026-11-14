@@ -2,3 +2,5 @@
 build/
 .swiftpm/
 __pycache__/
+[Bb]in/
+[Oo]bj/

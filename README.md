@@ -1,12 +1,38 @@
 # Queue Launcher
 
-Open **build/Queue Launcher.app**, paste a release URL, enter a session count from 1 to 50, and click **Open sessions**. The default is five. Each session opens in the same app window with its own isolated WebKit data store.
+## Windows
 
-Choose a session from the sidebar or click **Next session**. Complete the site’s CAPTCHA in the browser pane, then click **Mark ready**. **Add session** opens and selects one more session from the original URL, up to 50 total. Existing pages stay loaded and keep their ready status. Use the arrow in a square next to the link icon to **Copy and close** in one click. The **×** closes the session by itself. **End batch** closes the pages and discards the saved browser data after confirmation.
+Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build the app and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) to run it. From PowerShell in the repository root:
+
+```powershell
+dotnet run --project Windows/QueueLauncher.csproj
+```
+
+To publish a portable Windows x64 build with .NET included:
+
+```powershell
+dotnet publish Windows/QueueLauncher.csproj -c Release -r win-x64 --self-contained true -o build/windows-x64
+```
+
+Launch **QueueLauncher.exe** from the published folder and keep its companion files alongside it. For Windows on ARM, use `win-arm64` as the runtime identifier. Each session uses its own WebView2 profile. Windows batches and drop logs are stored under `%LOCALAPPDATA%\Queue Launcher`. **Copy link**, **Copy and close**, and **Close session** act on the selected sidebar row. Close and **End batch** clear the affected profiles’ browsing data and let WebView2 remove their profile files.
+
+To get the offline test URL on Windows, run:
+
+```powershell
+([uri](Resolve-Path Scripts/local-waiting-room.html).Path).AbsoluteUri
+```
+
+Run the Windows queue-status and link checks with `dotnet run --project Tests/Windows`.
+
+## Usage
+
+Paste a release URL, enter a session count from 1 to 50, and click **Open sessions**. The default is five. Each session opens in the same app window with its own browser data.
+
+Choose a session from the sidebar or click **Next session**. Complete the site’s CAPTCHA in the browser pane, then click **Mark ready**. **Add session** opens and selects one more session from the original URL, up to 50 total. Existing pages stay loaded and keep their ready status. **Copy and close** copies the link and closes the session in one action. **End batch** closes the pages and discards the saved browser data after confirmation.
 
 ## Local test
 
-Paste the file URL for `Scripts/local-waiting-room.html` into the launcher and open five sessions. To print the URL from this directory, run:
+Paste the file URL for `Scripts/local-waiting-room.html` into the launcher and open five sessions. To print the URL on macOS, run:
 
 ```sh
 python3 -c 'from pathlib import Path; print(Path("Scripts/local-waiting-room.html").resolve().as_uri())'
@@ -14,9 +40,9 @@ python3 -c 'from pathlib import Path; print(Path("Scripts/local-waiting-room.htm
 
 Each session should show a different queue ID. Reload a session to confirm its ID stays the same. Use the fixture checkbox to simulate joining, then mark that session ready. Cycle through all five, check that the launcher shows **5 of 5 ready**, then end the batch. The fixture uses local storage and runs offline.
 
-## Rebuild
+## macOS
 
-With Xcode or its command-line tools installed, run `Scripts/package-app.sh`. The script builds and locally signs the app.
+With Xcode or its command-line tools installed, run `Scripts/package-app.sh`. The script builds and locally signs **build/Queue Launcher.app**.
 
 ## Queue status and relaunch
 
@@ -26,6 +52,6 @@ Quit and reopen the app to restore a batch created in the updated build. The app
 
 ## Drop logs
 
-Click **Drop logs** to open the log folder in Finder. Each batch writes a timestamped JSON Lines log. Use the session number to compare observed CAPTCHA, waiting-room, queue-position, and error events, including numeric error codes when available. **Mark ready** records a manual action. CAPTCHA visibility is sampled, so a brief prompt may go unrecorded.
+Click **Drop logs** to open the log folder. Each batch writes a timestamped JSON Lines log. Use the session number to compare observed CAPTCHA, waiting-room, queue-position, and error events, including numeric error codes when available. **Mark ready** records a manual action. CAPTCHA visibility is sampled, so a brief prompt may go unrecorded.
 
 Logs survive **End batch** and app relaunch. They contain event names and numeric details. URLs, queue IDs, cookies, CAPTCHA answers, and tokens stay out of the logs.
