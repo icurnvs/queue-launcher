@@ -1,12 +1,14 @@
 # Queue Launcher Tauri prototype
 
+For the ported application and Windows portable ZIP, see the [repository README](../../README.md).
+
 This offline feasibility prototype exercises persistent browser sessions in one
 native window. It uses a small HTML and JavaScript launcher with Tauri 2 and
 Rust. It was branched from Queue Launcher commit `dbec19d`.
 
 ## Run
 
-Enter this directory and run `cargo run --locked`. On Windows, use an MSVC
+Enter this directory and run `cargo run --locked --bin queue-launcher-tauri-prototype`. On Windows, use an MSVC
 Rust toolchain, the Visual Studio C++ build tools and the installed Evergreen
 WebView2 runtime. On macOS 14 or newer, use Rust and the Xcode command-line
 tools. The bundled fixture listens only on `127.0.0.1:43192`. Run one copy at a
@@ -111,7 +113,7 @@ modes while the verification processes returned success.
 
 ## Windows named profiles
 
-Run `cargo run --locked -- --named-profiles` to try the second Windows storage
+Run `cargo run --locked --bin queue-launcher-tauri-prototype -- --named-profiles` to try the second Windows storage
 mode. It keeps its sessions and sample links under the `named-profiles`
 subdirectory of the prototype data root. Each session UUID becomes a WebView2
 profile name in one shared user data folder. The launcher keeps its own

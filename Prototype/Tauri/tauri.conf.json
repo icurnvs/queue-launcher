@@ -1,7 +1,7 @@
 {
-  "productName": "Queue Launcher Tauri Prototype",
+  "productName": "Queue Launcher",
   "version": "0.1.0",
-  "identifier": "local.queue-launcher.tauri-prototype",
+  "identifier": "local.queue-launcher.tauri",
   "build": { "frontendDist": "ui" },
   "app": {
     "windows": [],

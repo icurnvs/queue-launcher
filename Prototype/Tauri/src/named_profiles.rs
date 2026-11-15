@@ -26,29 +26,42 @@ fn build(
     fixture: Option<&str>,
     verifying: bool,
 ) -> Result<WebView> {
+    build_named(window, root, id, move |mut builder| {
+        builder = builder
+            .with_bounds(wry::Rect {
+                position: wry::dpi::LogicalPosition::new(0., TOOLBAR).into(),
+                size: wry::dpi::LogicalSize::new(WIDTH, HEIGHT - TOOLBAR).into(),
+            })
+            .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny);
+        if let Some(url) = fixture {
+            let allowed = url.to_owned();
+            builder = builder
+                .with_url(url)
+                .with_navigation_handler(move |target| target == allowed);
+            if verifying {
+                builder =
+                    builder.with_initialization_script(format!("window.fixtureSession = '{id}';"));
+            }
+        } else {
+            builder = builder.with_navigation_handler(|_| false);
+        }
+        builder
+    })
+}
+
+pub fn build_named(
+    window: &Window,
+    root: &Path,
+    id: Uuid,
+    configure: impl for<'a> FnOnce(WebViewBuilder<'a>) -> WebViewBuilder<'a>,
+) -> Result<WebView> {
     let name = id.simple().to_string();
     let mut context = wry::WebContext::new(Some(root.join("webview2")));
-    let mut builder = WebViewBuilder::new_with_web_context(&mut context)
+    let builder = WebViewBuilder::new_with_web_context(&mut context)
         .with_profile_name(&name)
         .with_visible(false)
-        .with_devtools(false)
-        .with_bounds(wry::Rect {
-            position: wry::dpi::LogicalPosition::new(0., TOOLBAR).into(),
-            size: wry::dpi::LogicalSize::new(WIDTH, HEIGHT - TOOLBAR).into(),
-        })
-        .with_new_window_req_handler(|_, _| wry::NewWindowResponse::Deny);
-    if let Some(url) = fixture {
-        let allowed = url.to_owned();
-        builder = builder
-            .with_url(url)
-            .with_navigation_handler(move |target| target == allowed);
-        if verifying {
-            builder =
-                builder.with_initialization_script(format!("window.fixtureSession = '{id}';"));
-        }
-    } else {
-        builder = builder.with_navigation_handler(|_| false);
-    }
+        .with_devtools(false);
+    let builder = configure(builder);
     let view = builder.build_as_child(window)?;
     let mut profile_name = PWSTR::null();
     unsafe { profile(&view)?.ProfileName(&mut profile_name)? };
@@ -60,11 +73,15 @@ fn build(
 
 pub fn create(window: &Window, root: &Path, id: Uuid, url: &str, verifying: bool) -> Result<()> {
     let view = build(window, root, id, Some(url), verifying)?;
-    VIEWS.with(|views| views.borrow_mut().insert(id, view));
+    register(id, view);
     Ok(())
 }
 
-fn with_view<T>(id: Uuid, f: impl FnOnce(&WebView) -> Result<T>) -> Result<T> {
+pub fn register(id: Uuid, view: WebView) {
+    VIEWS.with(|views| views.borrow_mut().insert(id, view));
+}
+
+pub fn with_view<T>(id: Uuid, f: impl FnOnce(&WebView) -> Result<T>) -> Result<T> {
     VIEWS.with(|views| {
         let views = views.borrow();
         f(views.get(&id).ok_or("missing native session view")?)

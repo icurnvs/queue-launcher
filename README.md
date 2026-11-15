@@ -1,6 +1,54 @@
 # Queue Launcher
 
-## Windows
+## Tauri on Windows
+
+The Rust and Tauri port uses persistent named WebView2 profiles. Install
+the Rust MSVC toolchain, Visual Studio C++ build tools, and the WebView2
+Evergreen Runtime. From the repository root, run:
+
+```powershell
+cargo run --locked --manifest-path Prototype/Tauri/Cargo.toml
+```
+
+Start with **Demo mode** for 12 offline sessions. Demo and live batches
+keep separate browser profiles, link history, drop logs, and preferences.
+In a live batch, paste an HTTP, HTTPS, or local fixture URL and open up to
+50 sessions. Sessions stay loaded while you switch between them. The app
+restores the last selection, manual ready state, and saved browser
+profiles on relaunch.
+
+To create a portable ZIP with a Microsoft-signed Fixed Version runtime:
+
+```powershell
+.\Scripts\package-tauri-windows.ps1 -RuntimeCab 'C:\path\to\Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab'
+```
+
+Extract the ZIP to a local folder. On Windows 11, run **QueueLauncher.exe**.
+For Windows 10, the ZIP includes **Open on Windows 10.cmd** to grant the
+browser sandbox read access to the runtime folder before launch. For
+ARM64, install the Rust ARM64 MSVC target and pass `-Architecture arm64`
+with the matching CAB.
+
+The port keeps its data in `%LOCALAPPDATA%\local.queue-launcher.tauri`.
+Existing WinForms and Swift data remain in their existing locations.
+A new Tauri batch starts with fresh profiles. To use a disposable data
+directory for development, set `QUEUE_LAUNCHER_DATA`.
+
+Run the parser and persistence tests, then the Windows offline workflow
+check from PowerShell:
+
+```powershell
+cargo test --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+$env:QUEUE_LAUNCHER_DATA = Join-Path $env:TEMP ('queue-launcher-test-' + [guid]::NewGuid())
+cargo run --locked --manifest-path Prototype/Tauri/Cargo.toml -- --verify-offline
+Remove-Item Env:QUEUE_LAUNCHER_DATA
+```
+
+The browser isolation and 12- and 50-session benchmark harness remains
+available in [the Tauri experiment](Prototype/Tauri/README.md). The next
+platform pass is native macOS validation.
+
+## WinForms on Windows
 
 Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build the app and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) to run it. From PowerShell in the repository root:
 
@@ -50,7 +98,7 @@ python3 -c 'from pathlib import Path; print(Path("Scripts/local-waiting-room.htm
 
 Each session should show a different queue ID. Reload a session to confirm its ID stays the same. Use the fixture checkbox to simulate joining, then mark that session ready. Cycle through all five, check that the launcher shows **5 of 5 ready**, then end the batch. The fixture uses local storage and runs offline.
 
-## macOS
+## Swift on macOS
 
 With Xcode or its command-line tools installed, run `Scripts/package-app.sh`. The script builds and locally signs **build/Queue Launcher.app**.
 

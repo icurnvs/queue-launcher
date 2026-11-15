@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Queue Launcher</title>
+  <link rel="stylesheet" href="app.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="identity">
+      <h1>Queue Launcher</h1>
+      <span id="demo-indicator" class="mode-label" hidden>Demo mode</span>
+    </div>
+    <div class="toolbar masthead-actions" aria-label="Batch actions">
+      <button id="demo" type="button">Demo mode</button>
+      <button id="add" type="button" hidden>Add session</button>
+      <button id="history" type="button">Link history</button>
+      <button id="logs" type="button">Drop logs</button>
+      <button id="end" class="masthead-danger" type="button" hidden>End batch</button>
+    </div>
+  </header>
+
+  <form id="setup" class="setup" aria-label="Open a batch">
+    <label for="release-url">Release URL
+      <input id="release-url" type="url" placeholder="https://..." autocomplete="off" spellcheck="false" required>
+    </label>
+    <label for="count">Sessions
+      <input id="count" type="number" min="1" max="50" value="5" required>
+    </label>
+    <button id="open" class="primary" type="submit">Open sessions</button>
+  </form>
+
+  <main>
+    <aside class="sessions" aria-labelledby="sessions-heading">
+      <div class="panel-heading">
+        <h2 id="sessions-heading">Sessions</h2>
+        <span id="ready-count" aria-live="polite"></span>
+      </div>
+      <label class="sort-control"><input id="sort" type="checkbox"> Sort by queue position</label>
+      <div id="session-scroll" class="session-scroll">
+        <p id="empty-sessions" class="muted">Sessions will appear here.</p>
+        <ul id="session-list" class="session-list" aria-label="Open sessions"></ul>
+      </div>
+    </aside>
+
+    <section class="workspace" aria-labelledby="browser-heading">
+      <div class="browser-header">
+        <div class="panel-heading browser-heading">
+          <h2 id="browser-heading">Browser</h2>
+          <div id="browser-controls" class="toolbar" aria-label="Browser actions" hidden>
+            <button id="back" type="button">Back</button>
+            <button id="reload" type="button">Reload</button>
+            <button id="next" type="button">Next session</button>
+            <button id="mark" class="primary" type="button">Mark ready</button>
+          </div>
+        </div>
+        <div id="session-actions" class="toolbar session-actions" aria-label="Selected session actions" hidden>
+          <button id="copy" type="button">Copy link</button>
+          <button id="copy-close" type="button">Copy and close</button>
+          <button id="close" class="danger" type="button">Close session</button>
+        </div>
+      </div>
+      <div id="browser-slot" class="browser-slot" aria-label="Session page">
+        <div id="placeholder" class="placeholder">
+          <h3 id="placeholder-title">Starting Queue Launcher...</h3>
+          <p id="placeholder-detail" class="muted" hidden></p>
+          <button id="retry" class="primary" type="button" hidden>Try again</button>
+        </div>
+      </div>
+      <p id="feedback" class="feedback" role="status" hidden></p>
+    </section>
+  </main>
+
+  <p id="notice" class="notice" role="alert" hidden></p>
+
+  <dialog id="end-dialog" aria-labelledby="end-heading" aria-describedby="end-description">
+    <form method="dialog" class="dialog-content">
+      <h2 id="end-heading">End batch</h2>
+      <p id="end-description">Close all sessions and discard their saved browser data?</p>
+      <div class="toolbar dialog-actions">
+        <button value="cancel" data-initial-focus>Cancel</button>
+        <button class="destructive" value="end">End batch</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="history-dialog" class="history-dialog" aria-labelledby="history-heading">
+    <div class="dialog-content">
+      <h2 id="history-heading">Link history</h2>
+      <p id="history-description">Saved queue links may expire at the waiting room.</p>
+      <div id="history-scroll" class="history-scroll" tabindex="0" aria-label="Saved queue links">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th scope="col"><button type="button" data-sort-key="batchSeen">Batch first seen</button></th>
+              <th scope="col"><button type="button" data-sort-key="session">Session</button></th>
+              <th scope="col"><button type="button" data-sort-key="ahead">Ahead when saved</button></th>
+              <th scope="col"><button type="button" data-sort-key="seen">Link saved</button></th>
+              <th scope="col"><button type="button" data-sort-key="url">Queue link</button></th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+      <div class="dialog-footer">
+        <p id="history-feedback" class="feedback-inline" role="status"></p>
+        <form method="dialog">
+          <button value="close" data-initial-focus>Close</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="session-dialog" aria-labelledby="session-dialog-heading">
+    <form method="dialog" class="dialog-content">
+      <h2 id="session-dialog-heading">Session actions</h2>
+      <div class="toolbar">
+        <button id="context-copy" value="copy">Copy queue link</button>
+        <button id="context-copy-close" value="copy_close">Copy and close</button>
+        <button class="danger" value="close">Close session</button>
+        <button value="cancel" data-initial-focus>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
