@@ -1,0 +1,20 @@
+{
+  "name": "queue-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && electron .",
+    "verify": "npm test && node tests/run.cjs",
+    "test": "npm run build && node --test tests/status.cjs",
+    "package": "npm run build && electron-packager . \"Queue Launcher\" --out=../build/electron --overwrite --asar"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/node": "22.20.5",
+    "electron": "45.3.2",
+    "typescript": "7.0.2"
+  },
+  "productName": "Queue Launcher"
+}

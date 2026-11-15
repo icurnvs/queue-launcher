@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Queue Launcher</title>
+  <link rel="stylesheet" href="launcher.css">
+  <script defer src="launcher.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <h1>Queue Launcher <span id="demo-label" hidden>Demo mode</span></h1>
+    <nav aria-label="Batch actions">
+      <button id="demo">Demo mode</button>
+      <button id="add" hidden>Add session</button>
+      <button id="history">Link history</button>
+      <button id="logs">Drop logs</button>
+      <button id="end" class="danger" hidden>End batch</button>
+    </nav>
+  </header>
+  <form id="setup">
+    <div class="release">
+      <label for="release-url">Release URL</label>
+      <input id="release-url" type="text" inputmode="url" required spellcheck="false" autocomplete="off" placeholder="https://">
+    </div>
+    <div class="quantity">
+      <label for="count">Sessions</label>
+      <input id="count" type="number" min="1" max="50" value="5" required>
+    </div>
+    <button id="open" class="primary">Open sessions</button>
+    <button id="fixture" type="button">Use offline fixture</button>
+  </form>
+  <main>
+    <aside aria-label="Sessions">
+      <div class="summary">
+        <h2>Sessions</h2>
+        <span id="ready" aria-live="polite"></span>
+      </div>
+      <label class="sort"><input id="sort" type="checkbox"> Sort by queue position</label>
+      <p id="empty-list">No sessions open</p>
+      <ul id="sessions" aria-label="Browser sessions"></ul>
+    </aside>
+    <section class="browser" aria-labelledby="selected">
+      <div class="browser-bar">
+        <h2 id="selected">Browser</h2>
+        <div id="navigation" class="actions" hidden>
+          <button id="back">Back</button>
+          <button id="reload">Reload</button>
+          <button id="next">Next session</button>
+          <button id="mark" class="primary">Mark ready</button>
+        </div>
+      </div>
+      <div id="session-actions" class="actions session-actions" hidden>
+        <button id="copy">Copy link</button>
+        <button id="copyClose">Copy and close</button>
+        <button id="close" class="danger">Close session</button>
+      </div>
+      <div id="page">
+        <div class="placeholder">
+          <h3 id="page-title">No browser session selected</h3>
+          <p id="page-message">Enter a release URL or try Demo mode.</p>
+          <button id="retry" hidden>Try again</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer id="feedback" role="status"></footer>
+  <dialog id="end-dialog" aria-labelledby="end-title">
+    <form method="dialog">
+      <h2 id="end-title">End this batch?</h2>
+      <p>This closes every session and clears its browser data. Saved links and drop logs are retained.</p>
+      <div class="dialog-actions">
+        <button value="cancel" autofocus>Cancel</button>
+        <button id="confirm-end" class="danger" value="end">End batch</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="history-dialog" aria-labelledby="history-title">
+    <header>
+      <h2 id="history-title">Link history</h2>
+      <form method="dialog"><button autofocus>Close</button></form>
+    </header>
+    <p id="history-hint"></p>
+    <div class="table-scroll">
+      <table id="history-table">
+        <thead><tr>
+          <th scope="col"><button data-sort="batch">Batch first seen</button></th>
+          <th scope="col"><button data-sort="session">Session</button></th>
+          <th scope="col"><button data-sort="ahead">Ahead when saved</button></th>
+          <th scope="col"><button data-sort="seen">Link saved</button></th>
+          <th scope="col"><button data-sort="url">Queue link</button></th>
+          <th scope="col">Clipboard</th>
+        </tr></thead>
+        <tbody id="history-rows"></tbody>
+      </table>
+    </div>
+    <p id="history-feedback" role="status"></p>
+  </dialog>
+</body>
+</html>

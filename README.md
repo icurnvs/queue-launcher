@@ -1,5 +1,9 @@
 # Queue Launcher
 
+## Electron port
+
+The [Electron port](Electron/README.md) runs the same launcher on Windows and macOS. Follow its instructions to run from source, verify with offline fixtures, or build a distributable.
+
 ## Windows
 
 Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) to build the app and the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) to run it. From PowerShell in the repository root:
