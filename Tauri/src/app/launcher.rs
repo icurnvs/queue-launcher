@@ -53,6 +53,7 @@ pub enum Action {
 pub struct Snapshot {
     demo: bool,
     url: String,
+    current_url: String,
     selected: Option<u32>,
     sessions: Vec<Row>,
     sort: bool,
@@ -123,6 +124,23 @@ impl Mode {
 
     fn selected(&self) -> Option<u32> {
         self.saved.batch.as_ref().and_then(|batch| batch.selected)
+    }
+
+    fn current_url(&self) -> Option<Url> {
+        let batch = self.saved.batch.as_ref()?;
+        let session = batch
+            .sessions
+            .iter()
+            .find(|session| Some(session.number) == batch.selected)?;
+        let fallback = session.waiting_room_url.as_ref().unwrap_or(&batch.url);
+        Some(
+            self.views
+                .get(&session.profile)
+                .and_then(|view| view.browser.as_ref())
+                .and_then(|browser| browser.url().ok())
+                .filter(|url| matches!(url.scheme(), "http" | "https" | "file"))
+                .unwrap_or_else(|| fallback.clone()),
+        )
     }
 
     fn commit(&mut self, saved: Saved) -> Result<()> {
@@ -282,6 +300,10 @@ impl Launcher {
         ].into_iter().flatten().collect::<Vec<_>>();
         Snapshot {
             demo: self.current == DEMO,
+            current_url: mode
+                .current_url()
+                .map(|url| url.to_string())
+                .unwrap_or_default(),
             url: mode
                 .saved
                 .batch
@@ -1082,6 +1104,27 @@ fn open_logs(path: PathBuf) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_url_follows_selection_before_browser_views_are_restored() {
+        let root = std::env::temp_dir().join(format!("queue-current-url-{}", Uuid::new_v4()));
+        let mut mode = Mode::new(root.clone()).unwrap();
+        assert_eq!(mode.current_url(), None);
+
+        let original: Url = "https://queue-launcher.example/release".parse().unwrap();
+        let resume: Url = "https://queue-launcher.example/waiting?session=one".parse().unwrap();
+        let mut batch = Batch::new(original.clone(), 2);
+        batch.sessions[0].waiting_room_url = Some(resume.clone());
+        batch.selected = Some(1);
+        mode.saved.batch = Some(batch);
+        assert_eq!(mode.current_url(), Some(resume));
+
+        mode.saved.batch.as_mut().unwrap().selected = Some(2);
+        assert_eq!(mode.current_url(), Some(original));
+        mode.saved.batch.as_mut().unwrap().selected = None;
+        assert_eq!(mode.current_url(), None);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn restored_links_are_copyable_before_any_session_is_selected_or_sampled() {

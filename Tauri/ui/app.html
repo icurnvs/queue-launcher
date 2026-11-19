@@ -49,8 +49,6 @@
         <div class="panel-heading browser-heading">
           <h2 id="browser-heading">Browser</h2>
           <div id="browser-controls" class="toolbar" aria-label="Browser actions" hidden>
-            <button id="back" type="button">Back</button>
-            <button id="reload" type="button">Reload</button>
             <button id="add" type="button">Add session</button>
             <button id="mark" class="primary" type="button">Mark ready</button>
           </div>
@@ -60,6 +58,11 @@
           <button id="copy-close" type="button">Copy and close</button>
           <button id="close" class="danger" type="button">Close session</button>
         </div>
+        <nav id="browser-navigation" class="browser-navigation" aria-label="Session navigation" hidden>
+          <button id="back" type="button">Back</button>
+          <button id="reload" type="button">Reload</button>
+          <input id="current-url" type="text" aria-label="Current session URL" placeholder="Session URL" readonly spellcheck="false" autocomplete="off">
+        </nav>
       </div>
       <div id="browser-slot" class="browser-slot" aria-label="Session page">
         <div id="placeholder" class="placeholder">

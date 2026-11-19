@@ -136,6 +136,11 @@ function renderControls(active = activeSession()) {
   controls.sort.checked = Boolean(state?.sort);
   controls["empty-sessions"].hidden = hasSessions;
   controls["browser-controls"].hidden = controls["session-actions"].hidden = !hasSessions;
+  controls["browser-navigation"].hidden = !hasSessions;
+  const currentUrl = state?.currentUrl || "";
+  if (controls["current-url"].value !== currentUrl) controls["current-url"].value = currentUrl;
+  controls["current-url"].title = currentUrl;
+  controls["current-url"].disabled = !active;
   setText(controls["ready-count"], hasSessions ? ready + " of " + state.sessions.length + " ready" : "");
   setText(controls["browser-heading"], active ? "Session " + active.number : "Browser");
   controls.mark.disabled = controls.close.disabled = busy || !active;
