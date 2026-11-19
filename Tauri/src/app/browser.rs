@@ -144,6 +144,12 @@ mod win {
         pub fn back(&self) -> Result<()> {
             self.core(|core| Ok(unsafe { core.GoBack()? }))
         }
+        pub fn forward(&self) -> Result<()> {
+            self.core(|core| Ok(unsafe { core.GoForward()? }))
+        }
+        pub fn stop(&self) -> Result<()> {
+            self.core(|core| Ok(unsafe { core.Stop()? }))
+        }
         pub fn reload(&self) -> Result<()> {
             self.core(|core| Ok(unsafe { core.Reload()? }))
         }
@@ -151,6 +157,14 @@ mod win {
             self.core(|core| {
                 let mut value = BOOL(0);
                 unsafe { core.CanGoBack(&mut value)? };
+                Ok(value.as_bool())
+            })
+            .unwrap_or(false)
+        }
+        pub fn can_go_forward(&self) -> bool {
+            self.core(|core| {
+                let mut value = BOOL(0);
+                unsafe { core.CanGoForward(&mut value)? };
                 Ok(value.as_bool())
             })
             .unwrap_or(false)

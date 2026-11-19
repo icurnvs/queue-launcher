@@ -39,6 +39,8 @@ pub enum Action {
     CopyClose { number: u32 },
     Close { number: u32 },
     Back,
+    Forward,
+    Stop,
     Reload,
     Retry,
     ToggleDemo,
@@ -71,6 +73,8 @@ struct Row {
     shareable: bool,
     error: Option<String>,
     can_go_back: bool,
+    can_go_forward: bool,
+    loading: bool,
     browser_ready: bool,
 }
 
@@ -241,6 +245,10 @@ impl Mode {
             can_go_back: self.selected() == Some(session.number)
                 && error.is_none()
                 && browser.is_some_and(Browser::can_go_back),
+            can_go_forward: self.selected() == Some(session.number)
+                && error.is_none()
+                && browser.is_some_and(Browser::can_go_forward),
+            loading: error.is_none() && view.is_some_and(|view| view.navigating.is_some()),
             browser_ready: error.is_none() && browser.is_some(),
             error,
         }
@@ -819,6 +827,24 @@ impl Launcher {
             }
             Action::Close { number } => self.remove(window, &[number]),
             Action::Back => self.selected_browser()?.back(),
+            Action::Forward => self.selected_browser()?.forward(),
+            Action::Stop => {
+                self.selected_browser()?.stop()?;
+                let mode = self.active_mut();
+                let selected = mode.selected();
+                let profile = mode
+                    .batch()?
+                    .sessions
+                    .iter()
+                    .find(|session| Some(session.number) == selected)
+                    .map(|session| session.profile);
+                if let Some(view) = profile.and_then(|profile| mode.views.get_mut(&profile)) {
+                    // Ignore the cancelled load's eventual completion, including
+                    // WebView2's connection-aborted result. New loads get a new ID.
+                    view.navigating = None;
+                }
+                Ok(())
+            }
             Action::Reload => {
                 self.selected_browser()?.reload()?;
                 let mode = self.active_mut();

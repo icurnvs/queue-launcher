@@ -146,7 +146,13 @@ function renderControls(active = activeSession()) {
   controls.mark.disabled = controls.close.disabled = busy || !active;
   controls.copy.disabled = controls["copy-close"].disabled = busy || !active?.shareable;
   controls.back.disabled = busy || !active?.canGoBack || !browserVisible(active);
+  controls.forward.disabled = busy || !active?.canGoForward || !browserVisible(active);
   controls.reload.disabled = busy || !browserVisible(active);
+  const loading = Boolean(active?.loading);
+  const reloadLabel = loading ? "Stop loading" : "Reload page";
+  controls.reload.dataset.loading = String(loading);
+  controls.reload.setAttribute("aria-label", reloadLabel);
+  controls.reload.title = reloadLabel;
   setText(controls.mark, active?.ready ? "Mark pending" : "Mark ready");
   controls["copy-close"].setAttribute("aria-label",
     active ? "Copy link and close Session " + active.number : "Copy and close");
@@ -458,7 +464,8 @@ controls.sort.addEventListener("change", event => perform("sort", { enabled: eve
 controls.demo.addEventListener("click", () => perform("toggle_demo"));
 controls.add.addEventListener("click", () => perform("add"));
 controls.logs.addEventListener("click", () => perform("open_logs"));
-for (const kind of ["back", "reload", "mark", "retry"]) {
+controls.reload.addEventListener("click", () => perform(activeSession()?.loading ? "stop" : "reload"));
+for (const kind of ["back", "forward", "mark", "retry"]) {
   controls[kind].addEventListener("click", () => perform(kind));
 }
 for (const kind of ["copy", "copy_close", "close"]) {

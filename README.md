@@ -77,8 +77,10 @@ switch between sessions. Complete the site's CAPTCHA, then click **Mark ready**.
 Use **Add session** to open one more session from the original URL.
 
 The navigation bar above the browser shows the selected session's current
-URL, including redirects. Select the address to copy it. **Back** and **Reload**
-act on that session; the address field updates when you switch sessions.
+URL, including redirects. Select the address to copy it. The **Back** and
+**Forward** arrows follow that session's page history. **Reload** changes to
+**Stop loading** while the page loads; click it to cancel the load. The address
+and navigation controls update when you switch sessions.
 
 The app restores the last selected session, manual ready state, and saved
 browser profiles on relaunch. **Copy** copies a session's shareable queue link;

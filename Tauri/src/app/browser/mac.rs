@@ -238,6 +238,21 @@ impl Browser {
         })
     }
 
+    pub fn forward(&self) -> Result<()> {
+        self.with_view(|native| {
+            let navigation = unsafe { native.view.goForward() };
+            native.delegate.started(navigation.as_deref());
+            Ok(())
+        })
+    }
+
+    pub fn stop(&self) -> Result<()> {
+        self.with_view(|native| {
+            unsafe { native.view.stopLoading() };
+            Ok(())
+        })
+    }
+
     pub fn reload(&self) -> Result<()> {
         self.with_view(|native| {
             let navigation = unsafe { native.view.reload() };
@@ -248,6 +263,11 @@ impl Browser {
 
     pub fn can_go_back(&self) -> bool {
         self.with_view(|native| Ok(unsafe { native.view.canGoBack() }))
+            .unwrap_or(false)
+    }
+
+    pub fn can_go_forward(&self) -> bool {
+        self.with_view(|native| Ok(unsafe { native.view.canGoForward() }))
             .unwrap_or(false)
     }
 

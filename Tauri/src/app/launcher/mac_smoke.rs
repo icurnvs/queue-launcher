@@ -355,6 +355,19 @@ impl Check {
             !self.act(Action::Status)?.sessions[0].can_go_back,
             "Back stayed enabled at the first page",
         )?;
+        ensure(
+            self.act(Action::Status)?.sessions[0].can_go_forward,
+            "Forward was not enabled after Back",
+        )?;
+        self.act(Action::Forward)?;
+        wait("Forward to return to the second page", || {
+            self.main(|_, launcher| {
+                Ok(launcher.selected_browser()?.url()?.path() == "/second"
+                    && !launcher.snapshot().sessions[0].loading)
+            })
+        })?;
+        self.act(Action::Back)?;
+        self.ready(2, "/home")?;
         let before = self.markers(1)?;
         self.act(Action::Reload)?;
         self.ready(2, "/home")?;
@@ -366,6 +379,17 @@ impl Check {
             "Reload did not replace the page while preserving storage",
         )?;
 
+        self.main(|_, launcher| {
+            launcher.selected_browser()?.navigate(format!("{ORIGIN}/slow").parse()?)
+        })?;
+        wait("slow page to start loading", || {
+            Ok(self.act(Action::Status)?.sessions[0].loading)
+        })?;
+        self.act(Action::Stop)?;
+        wait("Stop to finish without a page error", || {
+            let snapshot = self.act(Action::Status)?;
+            Ok(!snapshot.sessions[0].loading && snapshot.sessions[0].error.is_none())
+        })?;
         self.main(|_, launcher| {
             let browser = launcher.selected_browser()?;
             browser.navigate(format!("{ORIGIN}/slow").parse()?)?;
@@ -413,7 +437,7 @@ impl Check {
         })?;
 
         self.scale(12)?;
-        println!("PASS redirect, same-session popup, native Back state and Reload, overlapping navigation, same-origin cookie/storage isolation, no IPC, and switching without reload");
+        println!("PASS redirect, same-session popup, native Back/Forward, Reload and Stop, overlapping navigation, same-origin cookie/storage isolation, no IPC, and switching without reload");
         Ok(())
     }
 
