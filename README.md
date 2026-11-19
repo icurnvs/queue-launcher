@@ -2,8 +2,7 @@
 
 Queue Launcher uses Rust and Tauri for Windows and macOS. This is the primary
 implementation on `main`; future features, fixes, and releases target it.
-The application lives in [Prototype/Tauri](Prototype/Tauri), retaining its
-original directory name so existing build and verification commands keep working.
+The application lives in [Tauri](Tauri).
 The Swift, WinForms, Electron, and Avalonia versions are
 [archived for reference](archive/README.md).
 
@@ -27,13 +26,13 @@ build tools, and the WebView2 Evergreen Runtime. On macOS 14 or newer, install
 Xcode or its command-line tools. From the repository root:
 
 ```sh
-cargo run --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
 ```
 
 For an optimized release executable:
 
 ```sh
-cargo build --release --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+cargo build --release --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
 ```
 
 If the checkout is in a synced folder that rejects Cargo's build files, pass
@@ -57,8 +56,8 @@ Repackage with a newer CAB to update the bundled Chromium engine.
 With Node/npm and the native Rust and Xcode toolchains installed:
 
 ```sh
-cd Prototype/Tauri
-CARGO_TARGET_DIR="$PWD/../../build/tauri" \
+cd Tauri
+CARGO_TARGET_DIR="$PWD/../build/tauri" \
     npx --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles app --ci -- --locked
 ```
 
@@ -96,25 +95,25 @@ The Rust app keeps its data separate from the archived Swift and WinForms apps.
 Run the parser, link, and persistence tests:
 
 ```sh
-cargo test --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+cargo test --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
 ```
 
 Run the Windows offline application check with a fresh scratch directory:
 
 ```powershell
 $env:QUEUE_LAUNCHER_DATA = Join-Path $env:TEMP ('queue-launcher-test-' + [guid]::NewGuid())
-cargo run --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher -- --verify-offline
+cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher -- --verify-offline
 Remove-Item Env:QUEUE_LAUNCHER_DATA
 ```
 
 On a logged-in macOS desktop:
 
 ```sh
-sh Prototype/Tauri/verify-macos-app.sh
+sh Tauri/verify-macos-app.sh
 ```
 
 For a manual offline check, use the file URL for
 [Scripts/local-waiting-room.html](Scripts/local-waiting-room.html). Each session
 should have a different queue ID, retain it after reload, and retain its page
 state while switching sessions. The earlier browser isolation and scale
-harness remains documented in [Prototype/Tauri/README.md](Prototype/Tauri/README.md).
+harness remains documented in [Tauri/README.md](Tauri/README.md).

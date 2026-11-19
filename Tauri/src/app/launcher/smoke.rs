@@ -31,7 +31,7 @@ fn invoke<T: Send + 'static>(
 
 fn check(app: &AppHandle) -> Result<()> {
     let fixture =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../Scripts/local-waiting-room.html");
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../Scripts/local-waiting-room.html");
     let url = Url::from_file_path(fixture)
         .map_err(|_| "fixture path is invalid")?
         .to_string();

@@ -36,8 +36,8 @@ sw_vers
 uname -m
 xcode-select -p
 rustc --version
-cargo test --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
-sh Prototype/Tauri/verify-macos.sh
+cargo test --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
+sh Tauri/verify-macos.sh
 ```
 
 `verify-macos.sh` drives the earlier browser harness. It checks two same-origin
@@ -47,7 +47,7 @@ its own entry point and also needs testing:
 
 ```sh
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/queue-launcher-mac.XXXXXXXX")"
-QUEUE_LAUNCHER_DATA="$scratch"   cargo run --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+QUEUE_LAUNCHER_DATA="$scratch"   cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
 ```
 
 Reuse that exact scratch path when relaunching. Demo uses loopback port 43193
@@ -58,14 +58,14 @@ helps make a macOS regression reproducible.
 
 ## Finish the macOS adapter
 
-- **Navigation and process lifecycle.** In [browser.rs](../Prototype/Tauri/src/app/browser.rs)
+- **Navigation and process lifecycle.** In [browser.rs](../Tauri/src/app/browser.rs)
   the macOS code builds a child WKWebView with the saved UUID, uses Tauri page-load
   callbacks, and returns `false` from `can_go_back`. Wire up native WebKit
   back navigation and the enabled state. Exercise redirects, allowed popups in
   the same session, reload, provisional load errors, and retry. The current
   callbacks use a constant navigation ID and carry no load error. Check that
   overlapping navigations and stale page observations behave correctly.
-- **Stores and cleanup.** In [launcher.rs](../Prototype/Tauri/src/app/launcher.rs)
+- **Stores and cleanup.** In [launcher.rs](../Tauri/src/app/launcher.rs)
   the shared state journals pending cleanup before closing a session. The Mac
   adapter closes the child, waits 250 ms, and dispatches Wry
   `remove_data_store` on the main thread. Verify that WebKit has released the
@@ -77,10 +77,10 @@ helps make a macOS regression reproducible.
   and focus on resize, including Retina scaling. Open Link history and End
   batch confirmation and verify that the child hides and returns in the same
   page state. Check the clipboard and that Drop logs opens Finder. Preserve
-  the launcher capability boundary in [app.json](../Prototype/Tauri/capabilities/app.json).
+  the launcher capability boundary in [app.json](../Tauri/capabilities/app.json).
   Site views use the read-only page probe and have no host command permissions.
 - **Packaging.** Tauri bundling is currently disabled in
-  [tauri.conf.json](../Prototype/Tauri/tauri.conf.json). Produce a local macOS
+  [tauri.conf.json](../Tauri/tauri.conf.json). Produce a local macOS
   `.app` for the Tauri binary and validate launch from Finder, including a
   second launch against the same data. The existing
   [package-app.sh](../archive/legacy/Scripts/package-app.sh) builds the Swift app and is a
@@ -118,7 +118,7 @@ batch, separate Demo state, history, and log redaction. The 12- and 50-view
 browser harness passed with named profiles. The extracted Windows x64 ZIP
 loaded its adjacent Fixed Version WebView2 157.0.4341.60 and restored a
 three-session offline batch. See the [port README](../README.md) and the
-[browser harness results](../Prototype/Tauri/README.md) for reproduction.
+[browser harness results](../Tauri/README.md) for reproduction.
 
 ## Reproduce the native port checks
 
@@ -130,11 +130,11 @@ uname -m
 xcode-select -p
 xcodebuild -version
 rustc -Vv
-cargo test --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
-sh Prototype/Tauri/verify-macos-app.sh
+cargo test --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
+sh Tauri/verify-macos-app.sh
 (
-    cd Prototype/Tauri
-    CARGO_TARGET_DIR="$PWD/../../build/tauri" \
+    cd Tauri
+    CARGO_TARGET_DIR="$PWD/../build/tauri" \
         npx --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles app --ci -- --locked
 )
 codesign --verify --deep --strict "build/tauri/release/bundle/macos/Queue Launcher.app"

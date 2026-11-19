@@ -28,7 +28,7 @@ $target = switch ($Architecture) {
     'x64' { 'x86_64-pc-windows-msvc' }
     'arm64' { 'aarch64-pc-windows-msvc' }
 }
-$project = Join-Path $PSScriptRoot '../Prototype/Tauri'
+$project = Join-Path $PSScriptRoot '../Tauri'
 $manifest = Join-Path $project 'Cargo.toml'
 $targetDirectory = Join-Path $project 'target'
 cargo build --locked --release --manifest-path $manifest --bin queue-launcher --target $target --target-dir $targetDirectory

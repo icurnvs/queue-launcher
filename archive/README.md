@@ -2,7 +2,7 @@
 
 Rust/Tauri is the primary Queue Launcher implementation on `main` as of
 November 19, 2026. All new features, fixes, and releases target
-[Prototype/Tauri](../Prototype/Tauri).
+[Tauri](../Tauri).
 
 These older implementations are retained for reference and are no longer
 maintained or included in current releases.

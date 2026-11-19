@@ -23,7 +23,7 @@ const LIVE: usize = 0;
 const DEMO: usize = 1;
 const DEMO_PORT: u16 = 43193;
 const DEMO_LINK: &str = "https://queue-launcher.example/local-waiting-room.html";
-const FIXTURE: &str = include_str!("../../../../Scripts/local-waiting-room.html");
+const FIXTURE: &str = include_str!("../../../Scripts/local-waiting-room.html");
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
