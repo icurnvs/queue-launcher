@@ -18,7 +18,7 @@
       <button id="add" type="button" hidden>Add session</button>
       <button id="history" type="button">Link history</button>
       <button id="logs" type="button">Drop logs</button>
-      <button id="end" class="masthead-danger" type="button" hidden>End batch</button>
+      <button id="end" class="masthead-danger" type="button" hidden>End drop</button>
     </div>
   </header>
 
@@ -77,11 +77,11 @@
 
   <dialog id="end-dialog" aria-labelledby="end-heading" aria-describedby="end-description">
     <form method="dialog" class="dialog-content">
-      <h2 id="end-heading">End batch</h2>
+      <h2 id="end-heading">End drop</h2>
       <p id="end-description">Close all sessions and discard their saved browser data?</p>
       <div class="toolbar dialog-actions">
         <button value="cancel" data-initial-focus>Cancel</button>
-        <button class="destructive" value="end">End batch</button>
+        <button class="destructive" value="end">End drop</button>
       </div>
     </form>
   </dialog>
@@ -114,16 +114,5 @@
     </div>
   </dialog>
 
-  <dialog id="session-dialog" aria-labelledby="session-dialog-heading">
-    <form method="dialog" class="dialog-content">
-      <h2 id="session-dialog-heading">Session actions</h2>
-      <div class="toolbar">
-        <button id="context-copy" value="copy">Copy queue link</button>
-        <button id="context-copy-close" value="copy_close">Copy and close</button>
-        <button class="danger" value="close">Close session</button>
-        <button value="cancel" data-initial-focus>Cancel</button>
-      </div>
-    </form>
-  </dialog>
 </body>
 </html>

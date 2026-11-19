@@ -66,6 +66,29 @@ async fn port(app: AppHandle, action: Action) -> Reply<Snapshot> {
     })
 }
 
+#[tauri::command]
+async fn session_menu(app: AppHandle, number: u32, x: f64, y: f64) -> Reply<()> {
+    use tauri::menu::ContextMenu;
+    if !x.is_finite() || !y.is_finite() {
+        return Err("The menu position is invalid.".into());
+    }
+    let (menu, position) = on_main(&app, move |window, launcher| {
+        launcher.update();
+        #[cfg(target_os = "macos")]
+        let position = browser::menu_position(window, x.max(0.), y.max(0.))?;
+        #[cfg(not(target_os = "macos"))]
+        let position = LogicalPosition::new(x.max(0.), y.max(0.));
+        Ok((launcher.session_menu(window, number)?, position))
+    })?;
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        if let Some(window) = handle.get_window("main") {
+            let _ = menu.popup_at(window, position);
+        }
+    })
+    .map_err(|error| error.to_string())
+}
+
 #[cfg(target_os = "windows")]
 fn configure_webview_runtime() -> Result<()> {
     let executable = std::env::current_exe()?;
@@ -83,9 +106,25 @@ fn configure_webview_runtime() -> Result<()> {
 fn run() -> Result<()> {
     #[cfg(target_os = "windows")]
     configure_webview_runtime()?;
+    #[cfg(all(debug_assertions, target_os = "macos"))]
+    let smoke = launcher::mac_smoke::phase()?;
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![port])
-        .setup(|app| {
+        .invoke_handler(tauri::generate_handler![port, session_menu])
+        .on_menu_event(|app, event| {
+            if !event.id().as_ref().starts_with("session/") {
+                return;
+            }
+            let app = app.clone();
+            let id = event.id().as_ref().to_owned();
+            // Popup menus run a nested native event loop. Dispatch the action
+            // after the callback, without holding the launcher lock in that loop.
+            tauri::async_runtime::spawn(async move {
+                let _ = on_main(&app, move |window, launcher| {
+                    launcher.menu_action(window, &id)
+                });
+            });
+        })
+        .setup(move |app| {
             let root = std::env::var_os("QUEUE_LAUNCHER_DATA")
                 .map(std::path::PathBuf::from)
                 .map(Ok)
@@ -97,6 +136,10 @@ fn run() -> Result<()> {
                 return Err(
                     "Offline verification requires a new QUEUE_LAUNCHER_DATA directory.".into(),
                 );
+            }
+            #[cfg(all(debug_assertions, target_os = "macos"))]
+            if let Some(phase) = smoke {
+                phase.prepare(&root)?;
             }
             fs::create_dir_all(&root)?;
             let lock = OpenOptions::new()
@@ -130,7 +173,9 @@ fn run() -> Result<()> {
             let size = window
                 .inner_size()?
                 .to_logical::<f64>(window.scale_factor()?);
-            window.add_child(chrome, LogicalPosition::new(0., 0.), size)?;
+            let _chrome = window.add_child(chrome, LogicalPosition::new(0., 0.), size)?;
+            #[cfg(target_os = "macos")]
+            browser::attach_launcher(&_chrome)?;
 
             let mut launcher = Launcher::new(root)?;
             launcher.restore(&window);
@@ -139,6 +184,11 @@ fn run() -> Result<()> {
             #[cfg(all(debug_assertions, target_os = "windows"))]
             if smoke {
                 launcher::smoke::run(app.handle().clone());
+            }
+
+            #[cfg(all(debug_assertions, target_os = "macos"))]
+            if let Some(phase) = smoke {
+                launcher::mac_smoke::run(app.handle().clone(), phase);
             }
 
             let handle = app.handle().clone();

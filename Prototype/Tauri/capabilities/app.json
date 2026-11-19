@@ -1,1 +1,1 @@
-{"identifier":"app","webviews":["app"],"permissions":["allow-port"]}
+{"identifier":"app","webviews":["app"],"permissions":["allow-port","allow-session-menu"]}

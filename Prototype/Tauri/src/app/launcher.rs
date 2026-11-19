@@ -14,6 +14,8 @@ use std::{
 use tauri::Url;
 use uuid::Uuid;
 
+#[cfg(all(debug_assertions, target_os = "macos"))]
+pub mod mac_smoke;
 #[cfg(all(debug_assertions, target_os = "windows"))]
 pub mod smoke;
 
@@ -195,6 +197,20 @@ impl Mode {
         Ok(())
     }
 
+    fn share_link(&self, session: &Session) -> Option<&Url> {
+        self.views
+            .get(&session.profile)
+            .and_then(|view| view.share.as_ref())
+            .or_else(|| {
+                let batch = self.saved.batch.as_ref()?;
+                self.links
+                    .iter()
+                    .rev()
+                    .find(|link| link.batch == batch.log_id && link.session == session.number)
+                    .map(|link| &link.url)
+            })
+    }
+
     fn row(&self, session: &Session) -> Row {
         let view = self.views.get(&session.profile);
         let error = view.and_then(|view| view.error.clone());
@@ -203,7 +219,7 @@ impl Mode {
             number: session.number,
             ready: session.ready,
             status: view.and_then(|view| view.status.clone()),
-            shareable: view.is_some_and(|view| view.share.is_some()),
+            shareable: self.share_link(session).is_some(),
             can_go_back: self.selected() == Some(session.number)
                 && error.is_none()
                 && browser.is_some_and(Browser::can_go_back),
@@ -288,6 +304,11 @@ impl Launcher {
 
     pub fn restore(&mut self, window: &Window) {
         self.restore_mode(window, LIVE);
+        #[cfg(target_os = "macos")]
+        {
+            self.retry_cleanup(window, LIVE);
+            self.retry_cleanup(window, DEMO);
+        }
     }
 
     fn restore_mode(&mut self, window: &Window, mode: usize) {
@@ -304,6 +325,7 @@ impl Launcher {
                 self.create(window, mode, &batch, session);
             }
         }
+        #[cfg(target_os = "windows")]
         self.retry_cleanup(window, mode);
     }
 
@@ -580,25 +602,15 @@ impl Launcher {
     #[cfg(target_os = "macos")]
     fn delete_profile(
         &mut self,
-        window: &Window,
+        _window: &Window,
         index: usize,
         id: Uuid,
         browser: Option<Browser>,
     ) {
-        use wry::WebViewExtDarwin;
-        if browser.is_some_and(|view| view.discard().is_err()) {
-            self.finish_cleanup(index, id, false);
-            return;
-        }
-        let handle = window.clone();
+        drop(browser);
         let events = self.events.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(250));
-            let _ = handle.run_on_main_thread(move || {
-                wry::WebView::remove_data_store(id.as_bytes(), move |result| {
-                    let _ = events.send((id, Event::Removed(index, result.is_ok())));
-                });
-            });
+        browser::remove_store(id, move |ok| {
+            let _ = events.send((id, Event::Removed(index, ok)));
         });
     }
 
@@ -607,8 +619,11 @@ impl Launcher {
         if ok {
             let mut saved = mode.saved.clone();
             saved.pending_cleanup.retain(|other| *other != id);
-            mode.cleanup_error =
-                mode.commit(saved).is_err() || !mode.saved.pending_cleanup.is_empty();
+            if mode.commit(saved).is_err() {
+                mode.cleanup_error = true;
+            } else if mode.saved.pending_cleanup.is_empty() {
+                mode.cleanup_error = false;
+            }
         } else {
             mode.cleanup_error = true;
         }
@@ -657,12 +672,81 @@ impl Launcher {
             .find(|session| session.number == number)
             .ok_or("Session is no longer open.")?;
         let url = mode
-            .views
-            .get(&session.profile)
-            .and_then(|view| view.share.as_ref())
+            .share_link(session)
             .ok_or("No share link is available for this session.")?;
         clipboard(url)?;
         mode.feedback = Some(format!("Copied Session {number} link."));
+        Ok(())
+    }
+
+    pub fn session_menu(
+        &self,
+        window: &Window,
+        number: u32,
+    ) -> Result<tauri::menu::Menu<tauri::Wry>> {
+        use tauri::menu::{Menu, MenuItem};
+        let mode = self.active();
+        let session = mode
+            .batch()?
+            .sessions
+            .iter()
+            .find(|session| session.number == number)
+            .ok_or("Session is no longer open.")?;
+        let shareable = mode.share_link(session).is_some();
+        let item = |action: &str, label: &str, enabled| {
+            MenuItem::with_id(
+                window,
+                format!("session/{}/{action}", session.profile),
+                label,
+                enabled,
+                None::<&str>,
+            )
+        };
+        Ok(Menu::with_items(
+            window,
+            &[
+                &item("copy", "Copy link", shareable)?,
+                &item("copy_close", "Copy and close", shareable)?,
+                &item("close", "Close session", true)?,
+            ],
+        )?)
+    }
+
+    pub fn menu_action(&mut self, window: &Window, id: &str) -> Result<()> {
+        let mut parts = id.split('/');
+        if parts.next() != Some("session") {
+            return Ok(());
+        }
+        let profile = parts.next().and_then(|id| Uuid::parse_str(id).ok());
+        let action = parts.next();
+        if parts.next().is_some() {
+            return Ok(());
+        }
+        let number = self
+            .active()
+            .saved
+            .batch
+            .as_ref()
+            .and_then(|batch| {
+                batch
+                    .sessions
+                    .iter()
+                    .find(|session| Some(session.profile) == profile)
+            })
+            .map(|session| session.number);
+        let Some(number) = number else {
+            return Ok(());
+        };
+        let action = match action {
+            Some("copy") => Action::Copy { number },
+            Some("copy_close") => Action::CopyClose { number },
+            Some("close") => Action::Close { number },
+            _ => return Ok(()),
+        };
+        self.update();
+        if let Err(error) = self.act(window, action) {
+            self.active_mut().notice = Some(error.to_string());
+        }
         Ok(())
     }
 
@@ -826,18 +910,19 @@ impl Launcher {
                         }
                     }
                 }
-                #[cfg(target_os = "windows")]
                 Event::Terminated(code) => {
                     view.error = Some("This session's browser process closed.".into());
                     view.status = None;
                     view.share = None;
+                    view.observation = None;
+                    view.navigating = None;
                     view.document = view.document.wrapping_add(1);
                     redraw = true;
                     mode.record(
                         batch_id,
                         "web_process_terminated",
                         session_number,
-                        Some(code),
+                        code,
                         None,
                     );
                 }
@@ -992,4 +1077,42 @@ fn open_logs(path: PathBuf) -> Result<()> {
     };
     std::process::Command::new(command).arg(path).spawn()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restored_links_are_copyable_before_any_session_is_selected_or_sampled() {
+        let root = std::env::temp_dir().join(format!("queue-restored-links-{}", Uuid::new_v4()));
+        let batch = Batch::new("https://queue-launcher.example/release".parse().unwrap(), 2);
+        let link = Link::new(
+            batch.log_id,
+            1,
+            "https://queue-launcher.example/saved".parse().unwrap(),
+            Some(12),
+        );
+        let store = Store::new(root.clone()).unwrap();
+        store
+            .save(&Saved {
+                batch: Some(batch.clone()),
+                ..Saved::default()
+            })
+            .unwrap();
+        store.write_links(&[link.clone()]).unwrap();
+
+        let mut mode = Mode::new(root.clone()).unwrap();
+        assert!(mode.views.is_empty());
+        assert!(mode.row(&batch.sessions[0]).shareable);
+        assert_eq!(mode.share_link(&batch.sessions[0]), Some(&link.url));
+        assert!(!mode.row(&batch.sessions[1]).shareable);
+
+        // Session numbers are reused in new batches. Earlier links must never
+        // become the copy target for a new session with the same number.
+        mode.saved.batch = Some(Batch::new(batch.url.clone(), 2));
+        let new_session = &mode.saved.batch.as_ref().unwrap().sessions[0];
+        assert!(!mode.row(new_session).shareable);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

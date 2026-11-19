@@ -10,7 +10,6 @@ const drafts = { live: { url: "", count: "5" }, demo: { url: "", count: "12" } }
 let state;
 let busyAction;
 let modal;
-let contextNumber;
 let localNotice = "";
 let historyFeedback = "";
 let historySignature;
@@ -151,7 +150,8 @@ function renderControls(active = activeSession()) {
 
   for (const row of rows.values()) {
     row.card.disabled = busy;
-    row.copy.disabled = busy;
+    const session = state.sessions.find(session => session.number === Number(row.card.dataset.session));
+    row.copy.disabled = row.copyClose.disabled = busy || !session?.shareable;
   }
 
   controls.placeholder.hidden = browserVisible(active);
@@ -197,14 +197,18 @@ function createRow(number) {
   copy.addEventListener("click", () => perform("copy", { number }));
 
   card.addEventListener("click", () => perform("select", { number }));
-  card.addEventListener("contextmenu", event => {
+  item.addEventListener("click", event => {
+    if (!event.target.closest("button")) perform("select", { number });
+  });
+  item.addEventListener("contextmenu", event => {
     event.preventDefault();
-    showSessionActions(number);
+    showSessionActions(number, event.clientX, event.clientY);
   });
   card.addEventListener("keydown", event => {
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
       event.preventDefault();
-      showSessionActions(number);
+      const bounds = card.getBoundingClientRect();
+      showSessionActions(number, bounds.left + 12, bounds.bottom);
       return;
     }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
@@ -218,8 +222,14 @@ function createRow(number) {
     if (target !== number) perform("select", { number: target });
   });
 
-  item.append(card, copy);
-  return { item, card, copy };
+  const copyClose = makeText("button", "row-copy-close", "Copy and close");
+  copyClose.type = "button";
+  copyClose.setAttribute("aria-label", "Copy link and close Session " + number);
+  copyClose.addEventListener("click", () => perform("copy_close", { number }));
+  const actions = makeText("div", "row-actions", "");
+  actions.append(copy, copyClose);
+  item.append(card, actions);
+  return { item, card, copy, copyClose };
 }
 
 function renderCard(row, session, best) {
@@ -249,8 +259,7 @@ function renderCard(row, session, best) {
   if (status?.timeRemaining) details.push(makeText("span", "session-detail", status.timeRemaining + " left"));
   else if (status?.purchaseWindow) details.push(makeText("span", "session-detail", status.purchaseWindow + " once admitted"));
   if (session.error && !status?.message) details.push(makeText("span", "session-detail error", "Browser unavailable"));
-  row.copy.hidden = !session.shareable;
-  row.item.classList.toggle("has-copy", Boolean(session.shareable));
+  row.copy.disabled = row.copyClose.disabled = !session.shareable;
   row.card.replaceChildren(...details);
 }
 
@@ -277,9 +286,10 @@ function renderSessionRows(revealSelection) {
     if (row.item === firstUnordered) firstUnordered = firstUnordered.nextElementSibling;
     else list.insertBefore(row.item, firstUnordered);
     const selected = session.number === state.selected;
+    row.item.classList.toggle("selected", selected);
     row.card.setAttribute("aria-current", selected ? "true" : "false");
     row.card.tabIndex = selected || (state.selected == null && session === sessions[0]) ? 0 : -1;
-    row.copy.tabIndex = selected ? 0 : -1;
+    row.copy.tabIndex = row.copyClose.tabIndex = 0;
     renderCard(row, session, best);
   }
 
@@ -425,14 +435,14 @@ function closeDialog(dialog) {
   scheduleLayout();
 }
 
-function showSessionActions(number) {
+async function showSessionActions(number, x, y) {
   if (modal || busyAction) return;
-  const session = state.sessions.find(item => item.number === number);
-  if (!session) return;
-  contextNumber = number;
-  setText(controls["session-dialog-heading"], "Session " + number + " actions");
-  controls["context-copy"].disabled = controls["context-copy-close"].disabled = !session.shareable;
-  showDialog(controls["session-dialog"]);
+  try {
+    await window.__TAURI_INTERNALS__.invoke("session_menu", { number, x, y });
+  } catch (error) {
+    localNotice = errorText(error);
+    renderControls();
+  }
 }
 
 controls["release-url"].addEventListener("input", () => renderControls());
@@ -474,16 +484,12 @@ controls["history-table"].addEventListener("click", event => {
   historySort.key = key;
   renderHistory();
 });
-controls["session-dialog"].addEventListener("close", event => {
-  closeDialog(event.target);
-  const action = event.target.returnValue;
-  if (contextNumber != null && ["copy", "copy_close", "close"].includes(action)) {
-    perform(action, { number: contextNumber });
-  }
-  contextNumber = undefined;
-});
 
-new ResizeObserver(scheduleLayout).observe(controls["browser-slot"]);
+const layoutObserver = new ResizeObserver(scheduleLayout);
+for (const element of [controls["browser-slot"], document.querySelector(".browser-header"),
+  document.querySelector(".masthead")]) {
+  layoutObserver.observe(element);
+}
 window.addEventListener("resize", scheduleLayout);
 renderControls();
 (async function poll() {

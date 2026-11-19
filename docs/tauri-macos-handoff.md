@@ -114,3 +114,78 @@ browser harness passed with named profiles. The extracted Windows x64 ZIP
 loaded its adjacent Fixed Version WebView2 157.0.4341.60 and restored a
 three-session offline batch. See the [port README](../README.md) and the
 [browser harness results](../Prototype/Tauri/README.md) for reproduction.
+
+## Reproduce the native port checks
+
+From the macOS worktree with native stable Rust, Xcode, and Node/npm:
+
+```sh
+sw_vers
+uname -m
+xcode-select -p
+xcodebuild -version
+rustc -Vv
+cargo test --locked --manifest-path Prototype/Tauri/Cargo.toml --bin queue-launcher
+sh Prototype/Tauri/verify-macos-app.sh
+(
+    cd Prototype/Tauri
+    CARGO_TARGET_DIR="$PWD/../../build/tauri" \
+        npx --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles app --ci -- --locked
+)
+codesign --verify --deep --strict "build/tauri/release/bundle/macos/Queue Launcher.app"
+```
+
+The verification script launches the actual debug Tauri app in four processes.
+It uses scratch state, a same-origin HTTP fixture on loopback port 43194, and
+the built-in Demo on 43193. Leave both ports free before running it. The
+script checks persistent stores across launch, including startup with a
+journal representing an interrupted close. It also checks that the closed
+UUIDs are absent from WebKit's store registry. The scale timings start at
+the Open or Demo action and include a round trip to every loaded fixture.
+Switch timings include the Select action and a JavaScript round trip.
+
+The macOS-only bundle config builds an ad-hoc signed `.app`. To exercise
+Finder launch using scratch data, copy the app to a temporary directory, add
+`LSEnvironment.QUEUE_LAUNCHER_DATA` pointing to a fresh scratch directory
+in the copy's `Contents/Info.plist`, and re-sign the copy:
+
+```sh
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/queue-launcher-finder.XXXXXXXX")"
+copy="$scratch/Queue Launcher Verification.app"
+ditto "build/tauri/release/bundle/macos/Queue Launcher.app" "$copy"
+/usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$copy/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :LSEnvironment:QUEUE_LAUNCHER_DATA string $scratch/data" "$copy/Contents/Info.plist"
+codesign --force --sign - "$copy"
+```
+
+Open that copy from Finder and make a batch using a local fixture. Select a
+session, mark it ready, quit, and open the same copy again. The selected row,
+ready state, and session UUIDs in the scratch `Live/active-batch.json` should
+match between launches. When finished, End batch to clear its WebKit stores.
+
+The native acceptance run on macOS 26.6.2 (25G83), Apple Silicon, Xcode
+27.1 (27A9275), and Rust 1.100.0 passed all nine Rust unit tests. The complete
+port script passed with 12 Demo sessions ready at 2,842 ms and 50 Live
+fixture sessions ready at 3,385 ms. Switch and script round trips were
+14–35 ms and 6–7 ms, respectively. An earlier 50-session attempt timed out.
+The legacy prototype harness passed isolation, switching, and relaunch,
+then found residual data when reopening a deleted store. The port script
+verified targeted deletion and End batch in both modes.
+
+The ad-hoc signed arm64 release app passed strict signature verification.
+Opening a scratch copy from Finder initialized its scratch directory.
+Two subsequent LaunchServices launches of the release app restored a
+seeded two-session batch with identical profile IDs, selection, and ready
+state. A second interactive Finder launch and the interactive resize,
+focus, dialog, and Drop logs checks remain open. The x64 MSVC Rust check
+passed with LLVM's `llvm-rc` on PATH. Windows runtime, Intel Mac, and
+distribution signing were outside these runs.
+
+The November 19 follow-up added native session context menus, Copy and
+Copy and close inside each session card, selection by clicking the card
+background, and immediate access to saved links after relaunch. The
+browser pane now accounts for the title-bar inset in WebKit's viewport.
+The toolbar placement was checked in the running release app. Ten Rust
+tests and the updated native suite passed, including resize checks,
+restored copy actions, and 12- and 50-session runs. The Windows x64 MSVC
+check passed. The drop-ending button and confirmation now read **End drop**.

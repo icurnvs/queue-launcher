@@ -1,7 +1,9 @@
 use crate::{Result, Window};
 use serde::Deserialize;
 use std::{path::Path, sync::mpsc::Sender};
-use tauri::{LogicalPosition, LogicalSize, Url};
+use tauri::Url;
+#[cfg(target_os = "windows")]
+use tauri::{LogicalPosition, LogicalSize};
 use uuid::Uuid;
 
 #[derive(Copy, Clone, Deserialize, Default)]
@@ -13,6 +15,7 @@ pub struct Layout {
     pub visible: bool,
 }
 
+#[cfg(target_os = "windows")]
 impl Layout {
     pub fn position(self) -> LogicalPosition<f64> {
         LogicalPosition::new(self.x, self.y)
@@ -25,8 +28,7 @@ impl Layout {
 pub enum Event {
     Starting(u64),
     Finished(u64, Option<i32>),
-    #[cfg(target_os = "windows")]
-    Terminated(i32),
+    Terminated(Option<i32>),
     #[cfg(target_os = "macos")]
     Removed(usize, bool),
     Popup(Url),
@@ -223,7 +225,7 @@ mod win {
                             COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED
                                 | COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED
                         ) {
-                            let _ = failure.send((instance, Event::Terminated(kind.0)));
+                            let _ = failure.send((instance, Event::Terminated(Some(kind.0))));
                         }
                     }
                     Ok(())
@@ -236,83 +238,8 @@ mod win {
 }
 
 #[cfg(target_os = "macos")]
-pub struct Browser(tauri::Webview);
-
+mod mac;
+#[cfg(all(debug_assertions, target_os = "macos"))]
+pub use mac::store_exists;
 #[cfg(target_os = "macos")]
-impl Browser {
-    pub fn create(
-        window: &Window,
-        _root: &Path,
-        profile: Uuid,
-        instance: Uuid,
-        original: &Url,
-        start: &Url,
-        demo: bool,
-        events: &BrowserEvents,
-    ) -> Result<Self> {
-        use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
-        let allowed = original.clone();
-        let events = events.clone();
-        let popup = events.clone();
-        let builder = WebviewBuilder::new(
-            format!("session-{instance}"),
-            tauri::WebviewUrl::External(start.clone()),
-        )
-        .data_store_identifier(*profile.as_bytes())
-        .devtools(false)
-        .on_navigation(move |target| allows(target, &allowed, demo))
-        .on_new_window(move |url, _| {
-            let _ = popup.send((instance, Event::Popup(url)));
-            NewWindowResponse::Deny
-        })
-        .on_page_load(move |_, payload| {
-            let event = match payload.event() {
-                PageLoadEvent::Started => Event::Starting(0),
-                PageLoadEvent::Finished => Event::Finished(0, None),
-            };
-            let _ = events.send((instance, event));
-        });
-        let view = window.add_child(
-            builder,
-            LogicalPosition::new(0., 0.),
-            LogicalSize::new(1., 1.),
-        )?;
-        view.hide()?;
-        Ok(Self(view))
-    }
-
-    pub fn bounds(&self, layout: Layout) -> Result<()> {
-        Ok(self.0.set_bounds(tauri::Rect {
-            position: layout.position().into(),
-            size: layout.size().into(),
-        })?)
-    }
-    pub fn visible(&self, visible: bool) -> Result<()> {
-        Ok(if visible {
-            self.0.show()?
-        } else {
-            self.0.hide()?
-        })
-    }
-    pub fn navigate(&self, url: Url) -> Result<()> {
-        Ok(self.0.navigate(url)?)
-    }
-    pub fn url(&self) -> Result<Url> {
-        Ok(self.0.url()?)
-    }
-    pub fn back(&self) -> Result<()> {
-        Ok(self.0.eval("history.back()")?)
-    }
-    pub fn reload(&self) -> Result<()> {
-        Ok(self.0.reload()?)
-    }
-    pub fn can_go_back(&self) -> bool {
-        false
-    }
-    pub fn sample(&self, callback: impl Fn(String) + Send + 'static) -> Result<()> {
-        Ok(self.0.eval_with_callback(crate::READ_PAGE, callback)?)
-    }
-    pub fn discard(self) -> Result<()> {
-        Ok(self.0.close()?)
-    }
-}
+pub use mac::{attach_launcher, menu_position, remove_store, Browser};
