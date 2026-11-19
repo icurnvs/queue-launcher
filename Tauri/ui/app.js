@@ -138,7 +138,6 @@ function renderControls(active = activeSession()) {
   controls["browser-controls"].hidden = controls["session-actions"].hidden = !hasSessions;
   setText(controls["ready-count"], hasSessions ? ready + " of " + state.sessions.length + " ready" : "");
   setText(controls["browser-heading"], active ? "Session " + active.number : "Browser");
-  controls.next.disabled = busy || !hasSessions || state.sessions.length < 2;
   controls.mark.disabled = controls.close.disabled = busy || !active;
   controls.copy.disabled = controls["copy-close"].disabled = busy || !active?.shareable;
   controls.back.disabled = busy || !active?.canGoBack || !browserVisible(active);
@@ -454,7 +453,7 @@ controls.sort.addEventListener("change", event => perform("sort", { enabled: eve
 controls.demo.addEventListener("click", () => perform("toggle_demo"));
 controls.add.addEventListener("click", () => perform("add"));
 controls.logs.addEventListener("click", () => perform("open_logs"));
-for (const kind of ["back", "reload", "next", "mark", "retry"]) {
+for (const kind of ["back", "reload", "mark", "retry"]) {
   controls[kind].addEventListener("click", () => perform(kind));
 }
 for (const kind of ["copy", "copy_close", "close"]) {
