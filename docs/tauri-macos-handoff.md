@@ -1,5 +1,10 @@
 # Queue Launcher Tauri macOS handoff
 
+Rust/Tauri is now the primary implementation on `main`. Start current work
+from `main` and use the [repository README](../README.md) for build commands.
+The initial branch-transfer and adapter tasks below are historical context;
+the native results and follow-up checks are recorded later in this document.
+
 Finish the macOS side of the existing Rust and Tauri port on a Mac with a
 logged-in desktop. The implementation baseline is `8d2ae76` on
 `codex/rust-tauri-prototype`. Work from that branch's history so the shared
@@ -66,7 +71,7 @@ helps make a macOS regression reproducible.
   `remove_data_store` on the main thread. Verify that WebKit has released the
   view, that successful removal clears the journal, and that an interrupted
   close can be recovered at relaunch. Check live and Demo stores separately.
-  The [existing Swift app](../Sources/QueueLauncher/QueueLauncher.swift) is
+  The [archived Swift app](../archive/legacy/Sources/QueueLauncher/QueueLauncher.swift) is
   the native reference for UUID-backed stores and detaching before removal.
 - **Window and desktop integration.** Check the selected child view's placement
   and focus on resize, including Retina scaling. Open Link history and End
@@ -78,7 +83,7 @@ helps make a macOS regression reproducible.
   [tauri.conf.json](../Prototype/Tauri/tauri.conf.json). Produce a local macOS
   `.app` for the Tauri binary and validate launch from Finder, including a
   second launch against the same data. The existing
-  [package-app.sh](../Scripts/package-app.sh) builds the Swift app and is a
+  [package-app.sh](../archive/legacy/Scripts/package-app.sh) builds the Swift app and is a
   reference for local signing. Report which architecture and signing mode you
   tested. Distribution signing and notarization can be handled separately.
 

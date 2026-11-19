@@ -1,6 +1,9 @@
-# Queue Launcher Tauri prototype
+# Queue Launcher Rust/Tauri app and browser harness
 
-For the ported application and Windows portable ZIP, see the [repository README](../../README.md).
+Rust/Tauri is the primary application on `main`. For app builds, usage, and
+the Windows portable ZIP, see the [repository README](../../README.md).
+The `Prototype/Tauri` path is retained for build compatibility. The notes below
+describe the earlier browser feasibility harness and its historical results.
 
 This offline feasibility prototype exercises persistent browser sessions in one
 native window. It uses a small HTML and JavaScript launcher with Tauri 2 and
