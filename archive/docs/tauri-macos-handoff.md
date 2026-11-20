@@ -1,7 +1,11 @@
 # Queue Launcher Tauri macOS handoff
 
+> Archived development notes. Commands, results, and open items describe the
+> work at the time they were recorded. For current setup and verification, see
+> the [development guide](../../Tauri/README.md).
+
 Rust/Tauri is now the primary implementation on `main`. Start current work
-from `main` and use the [repository README](../README.md) for build commands.
+from `main` and use the [repository README](../../README.md) for build commands.
 The initial branch-transfer and adapter tasks below are historical context;
 the native results and follow-up checks are recorded later in this document.
 
@@ -58,32 +62,32 @@ helps make a macOS regression reproducible.
 
 ## Finish the macOS adapter
 
-- **Navigation and process lifecycle.** In [browser.rs](../Tauri/src/app/browser.rs)
+- **Navigation and process lifecycle.** In [browser.rs](../../Tauri/src/app/browser.rs)
   the macOS code builds a child WKWebView with the saved UUID, uses Tauri page-load
   callbacks, and returns `false` from `can_go_back`. Wire up native WebKit
   back navigation and the enabled state. Exercise redirects, allowed popups in
   the same session, reload, provisional load errors, and retry. The current
   callbacks use a constant navigation ID and carry no load error. Check that
   overlapping navigations and stale page observations behave correctly.
-- **Stores and cleanup.** In [launcher.rs](../Tauri/src/app/launcher.rs)
+- **Stores and cleanup.** In [launcher.rs](../../Tauri/src/app/launcher.rs)
   the shared state journals pending cleanup before closing a session. The Mac
   adapter closes the child, waits 250 ms, and dispatches Wry
   `remove_data_store` on the main thread. Verify that WebKit has released the
   view, that successful removal clears the journal, and that an interrupted
   close can be recovered at relaunch. Check live and Demo stores separately.
-  The [archived Swift app](../archive/legacy/Sources/QueueLauncher/QueueLauncher.swift) is
+  The [archived Swift app](../legacy/Sources/QueueLauncher/QueueLauncher.swift) is
   the native reference for UUID-backed stores and detaching before removal.
 - **Window and desktop integration.** Check the selected child view's placement
   and focus on resize, including Retina scaling. Open Link history and End
   batch confirmation and verify that the child hides and returns in the same
   page state. Check the clipboard and that Drop logs opens Finder. Preserve
-  the launcher capability boundary in [app.json](../Tauri/capabilities/app.json).
+  the launcher capability boundary in [app.json](../../Tauri/capabilities/app.json).
   Site views use the read-only page probe and have no host command permissions.
 - **Packaging.** Tauri bundling is currently disabled in
-  [tauri.conf.json](../Tauri/tauri.conf.json). Produce a local macOS
+  [tauri.conf.json](../../Tauri/tauri.conf.json). Produce a local macOS
   `.app` for the Tauri binary and validate launch from Finder, including a
   second launch against the same data. The existing
-  [package-app.sh](../archive/legacy/Scripts/package-app.sh) builds the Swift app and is a
+  [package-app.sh](../legacy/Scripts/package-app.sh) builds the Swift app and is a
   reference for local signing. Report which architecture and signing mode you
   tested. Distribution signing and notarization can be handled separately.
 
@@ -117,8 +121,8 @@ ready state, and the offline production check passed selective close, End
 batch, separate Demo state, history, and log redaction. The 12- and 50-view
 browser harness passed with named profiles. The extracted Windows x64 ZIP
 loaded its adjacent Fixed Version WebView2 157.0.4341.60 and restored a
-three-session offline batch. See the [port README](../README.md) and the
-[browser harness results](../Tauri/README.md) for reproduction.
+three-session offline batch. See the [port README](../../README.md) and the
+[browser harness results](tauri-browser-results.md) for reproduction.
 
 ## Reproduce the native port checks
 

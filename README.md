@@ -1,125 +1,86 @@
 # Queue Launcher
 
-Queue Launcher uses Rust and Tauri for Windows and macOS. This is the primary
-implementation on `main`; future features, fixes, and releases target it.
-The application lives in [Tauri](Tauri).
-The Swift, WinForms, Electron, and Avalonia versions are
-[archived for reference](archive/README.md).
+Queue Launcher is a desktop app for Windows and macOS that keeps multiple
+waiting-room sessions in one window. Each session has its own browser data,
+so you can work through the site's queue and switch between sessions without
+reloading their pages. The app is built with Rust and Tauri.
 
-## Download for Windows
+## Download
 
-Download the portable Windows x64 ZIP from
-[GitHub Releases](https://github.com/icurnvs/queue-launcher/releases/latest)
-and extract the entire ZIP to a local folder.
+Get the ZIP for your platform from
+[GitHub Releases](https://github.com/icurnvs/queue-launcher/releases/latest).
+SHA-256 checksum files are included with the downloads.
 
-- Windows 11: run **QueueLauncher.exe**.
-- Windows 10: run **Open on Windows 10.cmd** once to grant the browser sandbox
-  read access to the bundled runtime and launch the app.
+### Windows
 
-The ZIP includes Microsoft's Fixed Version WebView2 runtime. Application data
-is stored in `%LOCALAPPDATA%\local.queue-launcher.tauri`.
+Download the **windows-x64-portable.zip** and extract the entire ZIP to a
+local folder. Keep its companion files alongside the executable.
 
-## Build and run
+- **Windows 11:** run **QueueLauncher.exe**.
+- **Windows 10:** run **Open on Windows 10.cmd** once to grant the browser
+  sandbox read access to the bundled runtime and launch the app.
 
-Install Rust. On Windows, also install the MSVC toolchain, Visual Studio C++
-build tools, and the WebView2 Evergreen Runtime. On macOS 14 or newer, install
-Xcode or its command-line tools. From the repository root:
+The portable download includes Microsoft's WebView2 runtime.
 
-```sh
-cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
-```
+### macOS
 
-For an optimized release executable:
+Download the **macos-arm64.zip**, extract it, and move **Queue Launcher.app**
+to Applications. The download requires an **Apple Silicon Mac (M1 or newer)**
+running **macOS 14 or later**.
 
-```sh
-cargo build --release --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
-```
+The macOS release is ad-hoc signed and is not notarized. If macOS blocks it,
+click **Done**, then open **System Settings → Privacy & Security** and click
+**Open Anyway** for Queue Launcher. Confirm **Open** when prompted. See
+[Apple's instructions](https://support.apple.com/en-us/102445).
 
-If the checkout is in a synced folder that rejects Cargo's build files, pass
-`--target-dir` with a writable local directory to the Cargo command.
+## Use Queue Launcher
 
-## Windows portable packaging
+1. Paste a release URL and choose **1 to 50 sessions**.
+2. Click **Open sessions**. Select a session in the sidebar to view its page.
+3. Complete the site's CAPTCHA, then click **Mark ready** to track that session.
+4. Use **Add session** to open another session from the same release URL.
 
-Download Microsoft's signed WebView2 Fixed Version CAB matching the target
-architecture, then run from PowerShell:
+Try **Demo mode** to explore the app with 12 offline sessions. Demo and live
+batches have separate browser profiles, link history, logs, and preferences.
 
-```powershell
-.\Scripts\package-tauri-windows.ps1 -RuntimeCab 'C:\path\to\Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab'
-```
+### Navigate and track sessions
 
-For ARM64, install the Rust ARM64 MSVC target and pass `-Architecture arm64`
-with the matching CAB. Use `-OutputDirectory` to choose a fresh output folder.
-Repackage with a newer CAB to update the bundled Chromium engine.
+The browser toolbar shows the selected session's current URL, including
+redirects. Select the address to copy it. **Back** and **Forward** follow that
+session's history. **Reload** changes to **Stop loading** while a page loads.
 
-## macOS packaging
+For supported waiting rooms, session cards show queue position, estimated
+wait, purchase-window details, and reported errors. Enable **Sort by queue
+position** to put the closest spots first; **Best spot** marks the fewest
+members ahead. **Mark ready** records your manual status.
 
-With Node/npm and the native Rust and Xcode toolchains installed:
+### Share links and resume
 
-```sh
-cd Tauri
-CARGO_TARGET_DIR="$PWD/../build/tauri" \
-    npx --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles app --ci -- --locked
-```
+Use **Copy** to copy a session's shareable queue link, or **Copy and close**
+to copy it and close the session. **Link history** keeps saved links available
+after sessions close or the app restarts. The site controls whether a shared
+link or queue position is still valid.
 
-The locally signed app is written to
-`build/tauri/release/bundle/macos/Queue Launcher.app` from the repository root.
-See the [macOS verification notes](docs/tauri-macos-handoff.md) for native
-acceptance results, signing details, and remaining distribution work.
+Quit and reopen the app to restore the batch, selected session, ready states,
+and browser profiles. **End drop** closes all sessions in the active batch
+and clears their browser data after confirmation. Saved link history and logs
+remain available.
 
-## Usage
+### Logs and local data
 
-Start with **Demo mode** for 12 offline sessions. Demo and live batches keep
-separate browser profiles, link history, drop logs, and preferences.
+**Drop logs** opens the log folder. Timestamped JSON Lines logs record event
+names and numeric details. URLs, queue IDs, cookies, CAPTCHA answers, and tokens
+are excluded from these logs. Browser profiles and saved links stay on your
+computer.
 
-In a live batch, paste an HTTP, HTTPS, or local fixture URL and open 1 to 50
-sessions. Each session has separate browser data and stays loaded as you
-switch between sessions. Complete the site's CAPTCHA, then click **Mark ready**.
-Use **Add session** to open one more session from the original URL.
+On Windows, application data is stored in
+`%LOCALAPPDATA%\local.queue-launcher.tauri`. On macOS, application state is
+stored in `~/Library/Application Support/local.queue-launcher.tauri`, with
+session website data managed by WebKit.
 
-The navigation bar above the browser shows the selected session's current
-URL, including redirects. Select the address to copy it. The **Back** and
-**Forward** arrows follow that session's page history. **Reload** changes to
-**Stop loading** while the page loads; click it to cancel the load. The address
-and navigation controls update when you switch sessions.
+## Development
 
-The app restores the last selected session, manual ready state, and saved
-browser profiles on relaunch. **Copy** copies a session's shareable queue link;
-**Copy and close** also closes that session. **Link history** retains distinct
-shareable links after sessions close. Queue links can expire according to the
-site's rules. **End drop** closes the batch and clears its browser data after
-confirmation.
+See the [development guide](Tauri/README.md) for source layout, prerequisites,
+build commands, packaging, and offline verification.
 
-**Drop logs** opens the log folder. Timestamped JSON Lines logs contain event
-names and numeric details; URLs, queue IDs, cookies, CAPTCHA answers, and tokens
-stay out of the logs. Logs and saved link history survive ending a drop.
-
-Set `QUEUE_LAUNCHER_DATA` to use a separate data directory during development.
-The Rust app keeps its data separate from the archived Swift and WinForms apps.
-
-## Verification
-
-Run the parser, link, and persistence tests:
-
-```sh
-cargo test --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
-```
-
-Run the Windows offline application check with a fresh scratch directory:
-
-```powershell
-$env:QUEUE_LAUNCHER_DATA = Join-Path $env:TEMP ('queue-launcher-test-' + [guid]::NewGuid())
-cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher -- --verify-offline
-Remove-Item Env:QUEUE_LAUNCHER_DATA
-```
-
-On a logged-in macOS desktop:
-
-```sh
-sh Tauri/verify-macos-app.sh
-```
-
-For a manual offline check, use the file URL for
-[Scripts/local-waiting-room.html](Scripts/local-waiting-room.html). Each session
-should have a different queue ID, retain it after reload, and retain its page
-state while switching sessions. The earlier browser isolation and scale
-harness remains documented in [Tauri/README.md](Tauri/README.md).
+[Archived implementations and development notes](archive/README.md)

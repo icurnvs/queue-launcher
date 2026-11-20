@@ -1,170 +1,138 @@
-# Queue Launcher Rust/Tauri app and browser harness
+# Queue Launcher development
 
-Rust/Tauri is the primary application on `main`. For app builds, usage, and
-the Windows portable ZIP, see the [repository README](../README.md).
-The application lives in the top-level `Tauri` directory. The notes below
-describe the earlier browser feasibility harness and its historical results.
+Queue Launcher uses a shared Rust backend and HTML/CSS/JavaScript interface
+with native browser adapters for Windows and macOS. For downloads and usage,
+see the [repository README](../README.md).
 
-This offline feasibility prototype exercises persistent browser sessions in one
-native window. It uses a small HTML and JavaScript launcher with Tauri 2 and
-Rust. It was branched from Queue Launcher commit `dbec19d`.
+Run the commands below from the repository root unless stated otherwise.
 
-## Run
+## Source layout
 
-Enter this directory and run `cargo run --locked --bin queue-launcher-tauri-prototype`. On Windows, use an MSVC
-Rust toolchain, the Visual Studio C++ build tools and the installed Evergreen
-WebView2 runtime. On macOS 14 or newer, use Rust and the Xcode command-line
-tools. The bundled fixture listens only on `127.0.0.1:43192`. Run one copy at a
-time and leave that port available so the fixture origin is stable across
-launches.
+| Path | Responsibility |
+| --- | --- |
+| `src/app/main.rs` | Application startup and launcher window |
+| `src/app/launcher.rs` | Session actions, snapshots, and browser lifecycle |
+| `src/app/store.rs` | Persistent batches, link history, and cleanup journal |
+| `src/app/browser.rs` | Browser adapter and Windows WebView2 integration |
+| `src/app/browser/mac.rs` | Native macOS WebKit integration |
+| `src/queue_status.rs`, `src/read_queue_page.js` | Waiting-room observation and link parsing |
+| `ui/app.*` | Application interface |
+| `capabilities/app.json` | Launcher permissions |
+| `src/app/launcher/smoke.rs`, `src/app/launcher/mac_smoke.rs` | Platform offline application checks |
 
-1. Add two sessions. Each shows its own queue ID and cookie marker.
-2. Increment the counter in session 1, switch to session 2, and switch back.
-   The counter and page load marker stay the same.
-3. Save the sample link and quit with the window close button. Run again. The
-   IDs, cookies, and saved link return. The in-memory counter starts over.
-4. Close session 1. Session 2 remains open and the saved link remains visible.
+Paths in this table are relative to `Tauri`. Session pages have no launcher
+command permissions. Windows sessions use named WebView2 profiles; macOS
+sessions use UUID-backed WebKit website data stores. The child-webview API
+requires Tauri's `unstable` feature.
 
-Normal runs keep data under the prototype's app-local data directory, in
-`prototype`. Set `QUEUE_TAURI_PROTOTYPE_DATA` to use a separate scratch root.
-Close queues deletion and retries pending deletions on relaunch. On Windows
-each UUID names a dedicated WebView2 user data directory. On macOS each UUID
-selects a WKWebsiteDataStore and deletion uses Wry's
-`WebViewExtDarwin::remove_data_store` after closing the webview.
+## Prerequisites
 
-The launcher command is scoped to the trusted launcher webview by Tauri's
-capability manifest. Fixture pages can load only the exact loopback URL and
-cannot open new windows or invoke the launcher command. The verification
-fixture posts synthetic values to an in-process loopback receiver. The
-baseline probe stores those synthetic values in its scratch directory and
-prints only pass/fail outcomes and timing. The sample link is display-only.
+- Rust and Cargo.
+- **Windows:** the Rust MSVC toolchain, Visual Studio C++ build tools, and the
+  WebView2 Evergreen Runtime for development.
+- **macOS:** macOS 14 or later and Xcode or its command-line tools. Packaging
+  also uses Node.js and npm.
 
-## Repeat the checks
-
-Windows, from PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1
-```
-
-macOS 14+ on a logged-in desktop:
+## Build and run
 
 ```sh
-sh ./verify-macos.sh
+cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
 ```
 
-By default each script runs an initial two-view process, relaunches with
-the same session IDs, verifies deletion by reopening the same UUID, and
-runs fresh 12- and 50-view batches. They print the scratch path at the end. When
-finished, the Windows scratch files can be removed. On macOS, WebKit stores
-are managed by UUID outside the scratch directory. Close test sessions in
-the launcher using the appropriate scratch path to remove their stores.
+Build an optimized executable:
 
-## Platform and packaging notes
+```sh
+cargo build --release --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
+```
 
-The child-webview API requires Tauri's `unstable` feature. macOS needs a
-native verification run for isolation, persistence, view switching, and
-WebKit store removal. The Apple Silicon Rust type check passed on Windows with DOCS_RS=1 to
-skip compiling the Objective-C helper. It did not link or launch the app.
+Set `QUEUE_LAUNCHER_DATA` to use a separate application data directory during
+development. Use a new directory for destructive cleanup checks. Demo mode
+uses loopback port **43193**; leave it available.
 
-The directory-versus-profile comparison uses Evergreen WebView2. Tauri documents a
-`bundle.windows.webviewInstallMode` option with `type: fixedRuntime` and the
-extracted runtime folder for its installer. The named-profile check below uses the runtime from the existing portable
-ZIP on Windows 11. A Tauri ZIP build and the Windows 10 app container
-permissions remain untested.
-[Windows installer documentation](https://v2.tauri.app/distribute/windows-installer/#webview2-installation-options)
+If a synced folder rejects Cargo's build files, pass `--target-dir` with a
+writable local directory to the Cargo command.
 
-The fixture is the only supported page. Window dimensions are fixed for the
-prototype, and session creation is serialized through the UI thread. The
-scale measurements use an idle local page and three programmatic switches.
-They leave live page workload, prolonged use, and lower-memory machines
-unmeasured.
+## Package for Windows
 
-## Windows results
-
-Observed on Windows 11 Pro with 16 GiB RAM, WebView2 Evergreen 157.0.4341.46,
-and the unoptimized Rust build. The same-origin checks passed for cookie and
-local-storage isolation, retention of the in-memory page on switches,
-relaunch with the same UUIDs, and removal of one store without affecting
-the other. The fixture had no access to the launcher command, and the
-sample link survived both relaunch and deletion. The launcher UI was
-also exercised interactively for adding sessions, switching, and saving a link.
-
-Both modes passed the same isolation, switching, relaunch, and cleanup
-checks on Windows. These are consecutive runs from the same debug build,
-with a fresh data root for each scale run.
-
-| Storage mode | Fixture views | Created | All views ready | Switch and fixture round trip | Browser processes | Total WebView2 processes | Profile files |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Per-session directories | 12 | 6.03 s | 6.16 s | 17-36 ms | 13 | 78 | 70 MiB |
-| Named profiles | 12 | 3.01 s | 3.77 s | 16-28 ms | 2 | 23 | 42 MiB |
-| Per-session directories | 50 | 25.52 s | 25.60 s | 27-78 ms | 51 | 306 | 280 MiB |
-| Named profiles | 50 | 10.13 s | 11.80 s | 24-62 ms | 2 | 61 | 171 MiB |
-
-Creation and readiness times start at application launch. Readiness is
-when every fixture has reported its storage markers. Process counts
-include the launcher webview. Named mode had one browser process for the
-launcher and one for the shared session folder at both sizes. Previous
-directory-mode runs reached 50 views in 33.73 s and 40.24 s, so treat
-these timings as observations from this host.
-
-At 50 views, summed working-set snapshots were 2,735 MiB for directories
-and 3,126 MiB for named profiles. Summing working sets can count shared
-pages more than once. These snapshots do not establish a memory saving.
-WebView2 printed its window-class cleanup diagnostic at shutdown in both
-modes while the verification processes returned success.
-
-## Windows named profiles
-
-Run `cargo run --locked --bin queue-launcher-tauri-prototype -- --named-profiles` to try the second Windows storage
-mode. It keeps its sessions and sample links under the `named-profiles`
-subdirectory of the prototype data root. Each session UUID becomes a WebView2
-profile name in one shared user data folder. The launcher keeps its own
-WebView2 environment and its existing Tauri permissions. The session panes
-use Wry's Windows profile option directly because Tauri 2.12.5 does not
-forward it through its child-webview builder. The fixture panes have no
-launcher IPC handler.
-
-Run both modes from the same build on Windows:
+Download Microsoft's signed
+[WebView2 Fixed Version CAB](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+matching the target architecture. From PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -NamedProfiles
-powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -SkipBuild
+.\Scripts\package-tauri-windows.ps1 -RuntimeCab 'C:\path\to\Microsoft.WebView2.FixedVersionRuntime.<version>.x64.cab'
 ```
 
-On close, WebView2 clears the session profile's browsing data, then marks
-the profile for deletion. The test reads the fixture's cookies and local
-storage back after clearing, verifies that the other session's data and
-in-memory page survive, and verifies after relaunch that the deleted
-profile's directory is gone. On this runtime, reopening the old name
-still returned `ERROR_DELETE_PENDING` after the directory disappeared.
-The test checks that a fresh UUID starts with empty storage. Normal
-session creation always uses a new UUID.
-[WebView2 profile deletion documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2profile8?view=webview2-1.0.3912.50)
+The script builds the release executable and creates
+`build/tauri-windows-x64-portable.zip` with the browser runtime and Windows 10
+launcher. For ARM64, install the `aarch64-pc-windows-msvc` Rust target and pass
+`-Architecture arm64` with the matching CAB. Use `-OutputDirectory` to choose
+a fresh output folder. Repackage with a newer CAB to update the bundled engine.
 
+## Package for macOS
 
-## Windows Fixed Version check
+```sh
+cd Tauri
+CARGO_TARGET_DIR="$PWD/../build/tauri" \
+    npx --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles app --ci -- --locked
+```
 
-Use the extracted runtime folder from the existing Queue Launcher portable
-bundle. The verification script sets `WEBVIEW2_BROWSER_EXECUTABLE_FOLDER`
-for the run and confirms the executable path of every parent WebView2
-browser process at both scale checkpoints.
-[Microsoft Fixed Version distribution](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution#the-fixed-version-runtime-distribution-mode)
+The app is written to
+`build/tauri/release/bundle/macos/Queue Launcher.app` from the repository root.
+The default macOS configuration uses ad-hoc signing and builds for the host
+architecture. Developer ID signing and notarization require separate Apple
+credentials; the default command does not produce a notarized app.
+
+## Verify the application
+
+Run the Rust unit tests:
+
+```sh
+cargo test --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher
+```
+
+On Windows, run the offline application check from PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-windows.ps1 -NamedProfiles -FixedRuntimePath 'C:\path\to\WebView2Runtime'
+$env:QUEUE_LAUNCHER_DATA = Join-Path $env:TEMP ('queue-launcher-test-' + [guid]::NewGuid())
+try {
+    cargo run --locked --manifest-path Tauri/Cargo.toml --bin queue-launcher -- --verify-offline
+} finally {
+    Remove-Item Env:QUEUE_LAUNCHER_DATA
+}
 ```
 
-Named profiles passed isolation, no-reload switching, relaunch persistence,
-and targeted cleanup with the bundled x64 WebView2 157.0.4341.60 on
-Windows 11. The old name still returned `ERROR_DELETE_PENDING` after
-its directory was removed. A new UUID opened with empty storage.
+On a logged-in macOS desktop:
 
-| Fixture views | Created | All views ready | Switch and fixture round trip | Browser processes | Total WebView2 processes |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 12 | 3.30 s | 3.90 s | 24-33 ms | 2 | 24 |
-| 50 | 10.81 s | 11.94 s | 28-54 ms | 2 | 62 |
+```sh
+sh Tauri/verify-macos-app.sh
+```
 
-Both browser processes used the bundled executable at both sizes. The
-processes returned success with the same WebView2 window-class diagnostic
-observed at Evergreen shutdown. These are single-run measurements.
+The application checks run in debug builds with scratch data. The macOS script
+checks navigation, storage isolation, relaunch, cleanup recovery, and 12- and
+50-session batches. Its fixture uses port **43194**, and Demo uses **43193**.
+Check packaged release apps separately through their normal UI.
+
+For a manual offline check, open the file URL for
+[Scripts/local-waiting-room.html](../Scripts/local-waiting-room.html) in a batch.
+Each session should have a different queue ID, retain it after reload, and
+retain its page state while switching sessions.
+
+## Browser isolation harness
+
+The separate `queue-launcher-tauri-prototype` binary exercises browser stores
+and view switching with a local fixture. It uses port **43192** and separate
+data under `QUEUE_TAURI_PROTOTYPE_DATA`. Run one harness process at a time.
+
+From `Tauri`, run:
+
+```sh
+cargo run --locked --bin queue-launcher-tauri-prototype
+```
+
+For scripted checks, use `sh Tauri/verify-macos.sh` on macOS or
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\Tauri\verify-windows.ps1 -NamedProfiles`
+on Windows, from the repository root. The Windows script also accepts
+`-FixedRuntimePath` to check an extracted WebView2 runtime.
+
+These scripts exercise isolation, switching, relaunch, cleanup, and 12- and
+50-view batches. Use the application checks above for production workflows.
