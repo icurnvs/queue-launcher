@@ -7,20 +7,24 @@ The app is built with Rust and Tauri.
 
 ## Download
 
-Get the ZIP for your platform from
+Get the package for your platform from
 [GitHub Releases](https://github.com/icurnvs/queue-launcher/releases/latest).
 The downloads include SHA-256 checksum files.
 
 ### Windows
 
-Download the windows-x64-portable.zip and extract the entire ZIP to a
-local folder. Keep its companion files alongside the executable.
+Choose one Windows x64 download:
 
-- Windows 11: run QueueLauncher.exe.
-- Windows 10: run Open on Windows 10.cmd once to grant the browser
-  sandbox read access to the bundled runtime and launch the app.
+| Package filename ending | Best for | WebView2 browser runtime |
+| --- | --- | --- |
+| `windows-x64-setup.exe` | **Recommended for most users.** Installs Queue Launcher for your Windows account. | Uses installed Evergreen WebView2; downloads and installs it if missing (requires internet access). |
+| `windows-x64-portable-evergreen.zip` | Small portable download. Extract it and run `QueueLauncher.exe` without installing the app. | Evergreen WebView2 must already be installed. If missing, [install it from Microsoft](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download). |
+| `windows-x64-portable.zip` | Self-contained portable download. Extract the entire ZIP and keep all companion files beside `QueueLauncher.exe`. | Includes a fixed WebView2 runtime, making this ZIP much larger. Useful when installing the runtime is unavailable. |
 
-The portable download includes Microsoft's WebView2 runtime.
+For the **self-contained portable ZIP** on Windows 11, run `QueueLauncher.exe`.
+On Windows 10, run `Open on Windows 10.cmd` once to grant the browser sandbox
+read access to the bundled runtime and launch the app. The installer and
+Evergreen portable ZIP do not need this launcher.
 
 ### macOS
 
