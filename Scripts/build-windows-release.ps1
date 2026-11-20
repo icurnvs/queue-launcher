@@ -53,4 +53,7 @@ foreach ($file in Get-ChildItem -LiteralPath $output -File) {
     "$hash  $($file.Name)" | Set-Content -LiteralPath "$($file.FullName).sha256" -Encoding ascii
 }
 Get-ChildItem -LiteralPath $output -File | Select-Object Name, Length | Format-Table
-if ($env:GITHUB_OUTPUT) { "tag=$Tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8 }
+if ($env:GITHUB_OUTPUT) {
+    "tag=$Tag" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+    "commit=$(git rev-parse HEAD)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+}

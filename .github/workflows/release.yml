@@ -1,10 +1,8 @@
-name: Windows release
+name: Release
 
 on:
   push:
     tags: ['v*']
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -12,7 +10,7 @@ on:
         type: string
         default: ''
       publish:
-        description: 'Upload to GitHub Releases (requires a tag)'
+        description: 'Upload both platforms to a draft release (requires a tag)'
         type: boolean
         default: false
 
@@ -20,7 +18,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-release-${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -30,19 +28,20 @@ jobs:
     timeout-minutes: 60
     outputs:
       tag: ${{ steps.packages.outputs.tag }}
+      commit: ${{ steps.packages.outputs.commit }}
     defaults:
       run:
         shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
           persist-credentials: false
           fetch-depth: 0
       - name: Build and verify Windows packages
         id: packages
         env:
-          RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name || (github.ref_type == 'tag' && github.ref_name) || '' }}
+          RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
           PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
         run: |
           Write-Output "PowerShell $($PSVersionTable.PSVersion); module path: $env:PSModulePath"
@@ -59,8 +58,40 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+  macos:
+    if: github.repository == 'icurnvs/queue-launcher'
+    runs-on: macos-15
+    timeout-minutes: 45
+    outputs:
+      commit: ${{ steps.packages.outputs.commit }}
+    env:
+      RUSTUP_TOOLCHAIN: '1.94.0'
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - name: Build and verify macOS package
+        id: packages
+        env:
+          RELEASE_TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+          PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+        run: bash Scripts/build-macos-release.sh
+      - name: Save package and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-release
+          path: build/release/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   publish:
-    needs: build
+    needs: [build, macos]
     if: needs.build.outputs.tag != '' && (github.event_name != 'workflow_dispatch' || inputs.publish)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -69,19 +100,35 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: windows-release
+          pattern: '*-release'
+          merge-multiple: true
           path: release
-      - name: Upload to GitHub Releases
+      - name: Upload both platforms to a draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          WINDOWS_COMMIT: ${{ needs.build.outputs.commit }}
+          MACOS_COMMIT: ${{ needs.macos.outputs.commit }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "$WINDOWS_COMMIT" != "$MACOS_COMMIT" ]]; then
+            echo 'The Windows and macOS packages must come from the same commit.' >&2
+            exit 1
+          fi
+          if [[ $(find release -maxdepth 1 -type f | wc -l) -ne 8 ]]; then
+            echo 'Expected four packages and four checksum files.' >&2
+            exit 1
+          fi
+          (cd release && sha256sum --check *.sha256)
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            args=(--verify-tag --title "$RELEASE_TAG" --generate-notes)
+            args=(--draft --verify-tag --title "$RELEASE_TAG" --generate-notes)
             if [[ "$RELEASE_TAG" == *-* ]]; then args+=(--prerelease); fi
             gh release create "$RELEASE_TAG" "${args[@]}"
+          fi
+          if [[ $(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft) != true ]]; then
+            echo 'The release is already published; use a new version tag.' >&2
+            exit 1
           fi
           gh release upload "$RELEASE_TAG" release/* --clobber

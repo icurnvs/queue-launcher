@@ -98,27 +98,38 @@ launcher. For ARM64, install the `aarch64-pc-windows-msvc` Rust target and pass
 `-Architecture arm64` with the matching CAB. Use `-OutputDirectory` to choose
 a fresh output folder. Repackage with a newer CAB to update the bundled engine.
 
-### Automated Windows releases
+### Automated Windows and macOS releases
 
-The `Windows release` GitHub Actions workflow uses this PC's self-hosted
-runner to build the x64 installer, Evergreen portable ZIP, and self-contained
-portable ZIP. Each package has a SHA-256 checksum file. The self-hosted job
-has read-only repository access; a separate GitHub-hosted job uploads the
-packages to Releases. No personal access token is stored in the workflow.
+The `Release` GitHub Actions workflow builds both platforms from one tag.
+This PC's self-hosted runner builds the x64 installer, Evergreen portable
+ZIP, and self-contained portable ZIP. A GitHub-hosted Apple Silicon Mac
+builds the macOS ARM64 app ZIP. All four packages have SHA-256 checksum files.
+Both build jobs have read-only repository access. After both succeed, a
+separate GitHub-hosted job verifies the checksums and that both builds used
+the same commit, then uploads all eight files to one draft release. No
+personal access token or Apple signing credentials are stored in the workflow.
 
 To publish a new version, update `Tauri/Cargo.toml` (including `Cargo.lock`)
 and `Tauri/tauri.conf.json`, commit and push, then push the matching `v` tag,
 for example `v0.1.2`. The workflow builds that exact tagged commit and creates
-or updates its GitHub Release. Publishing a release through GitHub also
-triggers the workflow. Only matching version tags are accepted for `v` tags.
-macOS releases continue to be built separately and can be attached to the
-same release.
+or updates its draft GitHub Release. Only matching version tags are accepted
+for `v` tags. Review the files and release notes, then publish the draft when
+ready. Publishing the draft does not trigger another build. An upload run
+refuses to replace assets on an already published release; use a new version
+tag for subsequent releases. There is no need to create a draft manually.
 
-For a test, select **Actions > Windows release > Run workflow**, leave `tag`
+For a test, select **Actions > Release > Run workflow**, leave `tag`
 empty, and leave `publish` unchecked. Packages are available as a workflow
 artifact for seven days. To rebuild a release, enter its existing tag and
-check `publish`. Uploads replace the matching Windows assets and preserve
-other release assets, including macOS. An existing draft stays a draft.
+check `publish`. Uploads replace the four matching packages and their
+checksums on the draft. An existing draft stays a draft. Each platform's
+artifact can be downloaded independently if the other platform fails.
+
+The Mac job uses macOS 15, Rust 1.94.0, and a macOS 14 deployment target.
+It runs Rust unit tests and the native offline application checks, builds
+the app, then verifies its ad-hoc signature and ARM64 architecture before
+creating the ZIP. macOS signing and Gatekeeper behavior are the same as
+the manual build described below; this workflow does not notarize the app.
 
 The runner lives at `%LOCALAPPDATA%\QueueLauncherRunner`, outside Nextcloud.
 It starts in the background when this Windows user signs in, using a shortcut
