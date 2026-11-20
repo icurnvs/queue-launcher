@@ -35,10 +35,12 @@ click **Done**, then open **System Settings → Privacy & Security** and click
 
 ## Use Queue Launcher
 
-1. Paste a release URL and choose **1 to 50 sessions**.
+1. Paste a release URL and choose **1 to 50 sessions**. Start with a low number:
+   CAPTCHAs expire, so open only as many sessions as you can work through promptly.
 2. Click **Open sessions**. Select a session in the sidebar to view its page.
 3. Complete the site's CAPTCHA, then click **Mark ready** to track that session.
-4. Use **Add session** to open another session from the same release URL.
+4. Use **Add session** to add more sessions from the same release URL as you're
+   ready to complete their CAPTCHAs.
 
 Try **Demo mode** to explore the app with 12 offline sessions. Demo and live
 batches have separate browser profiles, link history, logs, and preferences.
