@@ -26,3 +26,12 @@ git fetch origin --tags
 git show archive/electron:README.md
 git show archive/avalonia:README.md
 ```
+
+## Development records
+
+These records preserve implementation experiments and platform acceptance
+results. Their commands and open items describe the work at the time they
+were written; use the [development guide](../Tauri/README.md) for current setup.
+
+- [Browser feasibility checks and benchmark results](docs/tauri-browser-results.md)
+- [macOS adapter handoff and native acceptance notes](docs/tauri-macos-handoff.md)
