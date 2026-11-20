@@ -54,6 +54,36 @@ writable local directory to the Cargo command.
 
 ## Package for Windows
 
+### Evergreen installer
+
+From `Tauri`, build a per-user NSIS setup executable:
+
+```powershell
+npx.cmd --yes --package @tauri-apps/cli@2.12.4 tauri build --bundles nsis --ci -- --locked
+```
+
+The installer is written to `Tauri/target/release/bundle/nsis/`. It uses the
+installed Evergreen WebView2 Runtime and downloads Microsoft's bootstrapper
+if the runtime is missing. That fallback requires internet access. The
+Windows-specific Tauri configuration leaves macOS packaging unchanged.
+
+### Small portable ZIP
+
+From the repository root:
+
+```powershell
+.\Scripts\package-tauri-windows.ps1
+```
+
+This creates `build/tauri-windows-x64-portable-evergreen.zip`. Extract it and
+run `QueueLauncher.exe`; there is no app installer. Evergreen WebView2 must
+already be installed, or the user must install it using the link in the
+included README. This ZIP does not automatically install the runtime.
+Application data still lives in `%LOCALAPPDATA%\local.queue-launcher.tauri`,
+shared with installed copies, rather than beside the executable.
+
+### Self-contained portable ZIP
+
 Download Microsoft's signed
 [WebView2 Fixed Version CAB](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 matching the target architecture. From PowerShell:
@@ -67,6 +97,50 @@ The script builds the release executable and creates
 launcher. For ARM64, install the `aarch64-pc-windows-msvc` Rust target and pass
 `-Architecture arm64` with the matching CAB. Use `-OutputDirectory` to choose
 a fresh output folder. Repackage with a newer CAB to update the bundled engine.
+
+### Automated Windows releases
+
+The `Windows release` GitHub Actions workflow uses this PC's self-hosted
+runner to build the x64 installer, Evergreen portable ZIP, and self-contained
+portable ZIP. Each package has a SHA-256 checksum file. The self-hosted job
+has read-only repository access; a separate GitHub-hosted job uploads the
+packages to Releases. No personal access token is stored in the workflow.
+
+To publish a new version, update `Tauri/Cargo.toml` (including `Cargo.lock`)
+and `Tauri/tauri.conf.json`, commit and push, then push the matching `v` tag,
+for example `v0.1.2`. The workflow builds that exact tagged commit and creates
+or updates its GitHub Release. Publishing a release through GitHub also
+triggers the workflow. Only matching version tags are accepted for `v` tags.
+macOS releases continue to be built separately and can be attached to the
+same release.
+
+For a test, select **Actions > Windows release > Run workflow**, leave `tag`
+empty, and leave `publish` unchecked. Packages are available as a workflow
+artifact for seven days. To rebuild a release, enter its existing tag and
+check `publish`. Uploads replace the matching Windows assets and preserve
+other release assets, including macOS. An existing draft stays a draft.
+
+The runner lives at `%LOCALAPPDATA%\QueueLauncherRunner`, outside Nextcloud.
+It starts in the background when this Windows user signs in, using a shortcut
+in the user's Startup folder. Keep the PC awake, online, and signed in; locking
+the screen is fine. This setup is not a Windows service and does not run
+before sign-in. Diagnostics are in the runner's `_diag` directory and
+`runner-console.log`. To start it manually, run its `start-runner.ps1` script.
+
+To provision the same setup again, authenticate `gh` with repository admin
+access, install Rust/MSVC, Git, and Node.js, and run:
+
+```powershell
+.\Scripts\setup-windows-runner.ps1 -RuntimeCab 'C:\path\to\Microsoft.WebView2.FixedVersionRuntime.157.0.4341.60.x64.cab'
+```
+
+The setup verifies the runner download's published SHA-256 checksum and the
+CAB's Microsoft signature and pinned checksum. The CAB is cached under the
+runner's `_work/_tool/WebView2`. To upgrade the fixed runtime, update
+`.github/windows-runtime.json` with the new CAB filename and checksum, then
+rerun setup with that signed CAB. The Evergreen packages do not bundle it.
+This public repository's runner workflow intentionally has no pull-request
+trigger. Keep untrusted PR code off this PC's runner.
 
 ## Package for macOS
 
@@ -126,7 +200,7 @@ data under `QUEUE_TAURI_PROTOTYPE_DATA`. Run one harness process at a time.
 From `Tauri`, run:
 
 ```sh
-cargo run --locked --bin queue-launcher-tauri-prototype
+cargo run --locked --features browser-harness --bin queue-launcher-tauri-prototype
 ```
 
 For scripted checks, use `sh Tauri/verify-macos.sh` on macOS or

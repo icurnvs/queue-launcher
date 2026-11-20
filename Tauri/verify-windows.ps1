@@ -60,7 +60,7 @@ try {
         "Fixed WebView2 $($fixedBrowser.VersionInfo.ProductVersion) at $($fixedBrowser.FullName)"
     }
     if (!$SkipBuild) {
-        cargo build --locked
+        cargo build --locked --features browser-harness
         if ($LASTEXITCODE) { throw 'Prototype build failed' }
     }
     $exe = (Resolve-Path './target/debug/queue-launcher-tauri-prototype.exe').Path

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
-cargo build --locked
+cargo build --locked --features browser-harness
 exe=./target/debug/queue-launcher-tauri-prototype
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/queue-tauri.XXXXXXXX")
 export QUEUE_TAURI_PROTOTYPE_DATA="$scratch/baseline"

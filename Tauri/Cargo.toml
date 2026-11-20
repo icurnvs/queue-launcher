@@ -8,8 +8,14 @@ default-run = "queue-launcher"
 name = "queue-launcher"
 path = "src/app/main.rs"
 
+[[bin]]
+name = "queue-launcher-tauri-prototype"
+path = "src/main.rs"
+required-features = ["browser-harness"]
+
 [features]
 default = ["tauri/custom-protocol"]
+browser-harness = []
 
 [build-dependencies]
 tauri-build = "2"
