@@ -45,11 +45,7 @@ click **Done**, then open **System Settings → Privacy & Security** and click
 Try **Demo mode** to explore the app with 12 offline sessions. Demo and live
 batches have separate browser profiles, link history, logs, and preferences.
 
-### Navigate and track sessions
-
-The browser toolbar shows the selected session's current URL, including
-redirects. Select the address to copy it. **Back** and **Forward** follow that
-session's history. **Reload** changes to **Stop loading** while a page loads.
+### Track sessions
 
 For supported waiting rooms, session cards show queue position, estimated
 wait, purchase-window details, and reported errors. Enable **Sort by queue
