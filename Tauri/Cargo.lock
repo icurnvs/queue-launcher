@@ -2500,7 +2500,7 @@ dependencies = [
 
 [[package]]
 name = "queue-launcher-tauri-prototype"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "arboard",
  "block2",

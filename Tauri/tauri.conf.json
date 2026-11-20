@@ -1,6 +1,6 @@
 {
   "productName": "Queue Launcher",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "identifier": "local.queue-launcher.tauri",
   "build": { "frontendDist": "ui" },
   "app": {
