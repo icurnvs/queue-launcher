@@ -9,13 +9,8 @@ use tauri::{AppHandle, Url};
 
 pub fn run(app: AppHandle) {
     thread::spawn(move || {
-        let result = check(&app);
-        if let Err(error) = result {
-            eprintln!("FAIL: {error}");
-            app.exit(1);
-        } else {
-            app.exit(0);
-        }
+        let code = crate::verification::exit_code(|| check(&app));
+        app.exit(code);
     });
 }
 

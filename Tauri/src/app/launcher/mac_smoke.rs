@@ -79,18 +79,13 @@ struct Evidence {
 pub fn run(app: AppHandle, phase: Phase) {
     thread::spawn(move || {
         let check = Check(app);
-        let result = match phase {
+        let code = crate::verification::exit_code(|| match phase {
             Phase::Initial => check.initial(),
             Phase::Reopen => check.reopen(),
             Phase::Cleanup => check.cleanup(),
             Phase::Fifty => check.scale(50),
-        };
-        if let Err(error) = result {
-            eprintln!("FAIL: {error}");
-            check.0.exit(1);
-        } else {
-            check.0.exit(0);
-        }
+        });
+        check.0.exit(code);
     });
 }
 
@@ -380,7 +375,9 @@ impl Check {
         )?;
 
         self.main(|_, launcher| {
-            launcher.selected_browser()?.navigate(format!("{ORIGIN}/slow").parse()?)
+            launcher
+                .selected_browser()?
+                .navigate(format!("{ORIGIN}/slow").parse()?)
         })?;
         wait("slow page to start loading", || {
             Ok(self.act(Action::Status)?.sessions[0].loading)
@@ -660,20 +657,26 @@ impl Check {
                     "same-URL reload accepted a stale page sample",
                 )
             })?;
-            wait("Demo status after same-URL reload", || {
-                Ok(self
-                    .act(Action::Status)?
+            self.act(Action::Sort { enabled: true })?;
+            wait("fresh Demo queue positions after same-URL reload", || {
+                let snapshot = self.act(Action::Status)?;
+                let positions = snapshot
                     .sessions
                     .iter()
-                    .all(|row| row.shareable))
+                    .map(|row| row.status.as_ref().and_then(|status| status.ahead))
+                    .collect::<Option<Vec<_>>>();
+                let Some(positions) = positions else {
+                    return Ok(false);
+                };
+                if positions.len() != 12 {
+                    return Ok(false);
+                }
+                ensure(
+                    positions.windows(2).all(|pair| pair[0] <= pair[1]),
+                    "queue position sort is out of order",
+                )?;
+                Ok(true)
             })?;
-            let sorted = self.act(Action::Sort { enabled: true })?;
-            ensure(
-                sorted.sessions.windows(2).all(|pair| {
-                    pair[0].status.as_ref().unwrap().ahead <= pair[1].status.as_ref().unwrap().ahead
-                }),
-                "queue position sort is out of order",
-            )?;
             ensure(
                 self.store_exists(ids[0])?,
                 "Demo store was absent before close",

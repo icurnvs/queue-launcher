@@ -12,6 +12,8 @@ mod named_profiles;
 #[path = "../queue_status.rs"]
 mod queue_status;
 mod store;
+#[cfg(any(debug_assertions, test))]
+mod verification;
 
 use launcher::{Action, Launcher, Snapshot};
 use std::{
