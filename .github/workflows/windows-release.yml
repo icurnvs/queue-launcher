@@ -32,7 +32,7 @@ jobs:
       tag: ${{ steps.packages.outputs.tag }}
     defaults:
       run:
-        shell: powershell
+        shell: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -44,7 +44,12 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name || (github.ref_type == 'tag' && github.ref_name) || '' }}
           PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
-        run: ./Scripts/build-windows-release.ps1 -Tag $env:RELEASE_TAG -Publish:($env:PUBLISH -eq 'true')
+        run: |
+          Write-Output "PowerShell $($PSVersionTable.PSVersion); module path: $env:PSModulePath"
+          # Keep Windows PowerShell's modules available when the parent process is PowerShell 7.
+          $env:PSModulePath = "$PSHOME\Modules;$env:PSModulePath"
+          Get-Command cargo, npx.cmd, Get-FileHash, Get-AuthenticodeSignature | Select-Object Name, Source
+          ./Scripts/build-windows-release.ps1 -Tag $env:RELEASE_TAG -Publish:($env:PUBLISH -eq 'true')
       - name: Save packages and checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
