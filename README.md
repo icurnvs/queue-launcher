@@ -1,84 +1,83 @@
 # Queue Launcher
 
-Queue Launcher is a desktop app for Windows and macOS that keeps multiple
-waiting-room sessions in one window. Each session has its own browser data,
-so you can work through the site's queue and switch between sessions without
-reloading their pages. The app is built with Rust and Tauri.
+Queue Launcher keeps multiple waiting-room sessions in one window on Windows
+and macOS. Each session has its own browser data, so you can work through
+the site's queue and switch between sessions without reloading their pages.
+The app is built with Rust and Tauri.
 
 ## Download
 
 Get the ZIP for your platform from
 [GitHub Releases](https://github.com/icurnvs/queue-launcher/releases/latest).
-SHA-256 checksum files are included with the downloads.
+The downloads include SHA-256 checksum files.
 
 ### Windows
 
-Download the **windows-x64-portable.zip** and extract the entire ZIP to a
+Download the windows-x64-portable.zip and extract the entire ZIP to a
 local folder. Keep its companion files alongside the executable.
 
-- **Windows 11:** run **QueueLauncher.exe**.
-- **Windows 10:** run **Open on Windows 10.cmd** once to grant the browser
+- Windows 11: run QueueLauncher.exe.
+- Windows 10: run Open on Windows 10.cmd once to grant the browser
   sandbox read access to the bundled runtime and launch the app.
 
 The portable download includes Microsoft's WebView2 runtime.
 
 ### macOS
 
-Download the **macos-arm64.zip**, extract it, and move **Queue Launcher.app**
-to Applications. The download requires an **Apple Silicon Mac (M1 or newer)**
-running **macOS 14 or later**.
+Download the macos-arm64.zip, extract it, and move Queue Launcher.app
+to Applications. The download requires an Apple Silicon Mac (M1 or newer)
+running macOS 14 or later.
 
-The macOS release is ad-hoc signed and is not notarized. If macOS blocks it,
-click **Done**, then open **System Settings → Privacy & Security** and click
-**Open Anyway** for Queue Launcher. Confirm **Open** when prompted. See
+The macOS release has an ad-hoc signature but is not notarized. If macOS blocks it,
+click Done, then open System Settings > Privacy & Security and click
+Open Anyway for Queue Launcher. Confirm Open when prompted. See
 [Apple's instructions](https://support.apple.com/en-us/102445).
 
-## Use Queue Launcher
+## Using Queue Launcher
 
-1. Paste a release URL and choose **1 to 50 sessions**. Start with a low number:
+1. Paste a release URL and choose 1 to 50 sessions. Start with a low number:
    CAPTCHAs expire, so open only as many sessions as you can work through promptly.
-2. Click **Open sessions**. Select a session in the sidebar to view its page.
-3. Complete the site's CAPTCHA, then click **Mark ready** to track that session.
-4. Use **Add session** to add more sessions from the same release URL as you're
+2. Click Open sessions. Select a session in the sidebar to view its page.
+3. Complete the site's CAPTCHA, then click Mark ready to track that session.
+4. Use Add session to add more sessions from the same release URL as you're
    ready to complete their CAPTCHAs.
 
-Try **Demo mode** to explore the app with 12 offline sessions. Demo and live
+Try Demo mode with 12 offline sessions. Demo and live
 batches have separate browser profiles, link history, logs, and preferences.
 
-### Track sessions
+### Tracking sessions
 
 For supported waiting rooms, session cards show queue position, estimated
-wait, purchase-window details, and reported errors. Enable **Sort by queue
-position** to put the closest spots first; **Best spot** marks the fewest
-members ahead. **Mark ready** records your manual status.
+wait, purchase-window details, and reported errors. Enable Sort by queue
+position to put the closest spots first; Best spot marks the session with the fewest
+members ahead. Mark ready records the status you set manually.
 
-### Share links and resume
+### Sharing links and resuming a batch
 
-Use **Copy** to copy a session's shareable queue link, or **Copy and close**
-to copy it and close the session. **Link history** keeps saved links available
+Use Copy to copy a session's shareable queue link, or Copy and close
+to copy it and close the session. Link history keeps saved links available
 after sessions close or the app restarts. The site controls whether a shared
 link or queue position is still valid.
 
 Quit and reopen the app to restore the batch, selected session, ready states,
-and browser profiles. **End drop** closes all sessions in the active batch
+and browser profiles. End drop closes all sessions in the active batch
 and clears their browser data after confirmation. Saved link history and logs
 remain available.
 
 ### Logs and local data
 
-**Drop logs** opens the log folder. Timestamped JSON Lines logs record event
-names and numeric details. URLs, queue IDs, cookies, CAPTCHA answers, and tokens
-are excluded from these logs. Browser profiles and saved links stay on your
+Drop logs opens the log folder. Timestamped JSON Lines logs record event
+names and numeric details. They exclude URLs, queue IDs, cookies, CAPTCHA
+answers, and tokens. Browser profiles and saved links stay on your
 computer.
 
-On Windows, application data is stored in
-`%LOCALAPPDATA%\local.queue-launcher.tauri`. On macOS, application state is
-stored in `~/Library/Application Support/local.queue-launcher.tauri`, with
-session website data managed by WebKit.
+Windows stores application data in
+`%LOCALAPPDATA%\local.queue-launcher.tauri`. macOS stores application state in `~/Library/Application Support/local.queue-launcher.tauri`.
+WebKit manages session website data.
 
 ## Development
 
-See the [development guide](Tauri/README.md) for source layout, prerequisites,
+See the [development guide](Tauri/README.md) for the source layout, prerequisites,
 build commands, packaging, and offline verification.
 
 [Archived implementations and development notes](archive/README.md)
