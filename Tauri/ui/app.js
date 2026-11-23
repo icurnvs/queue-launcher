@@ -272,7 +272,6 @@ function renderCard(row, session, best) {
     details.push(estimate);
   }
   if (status?.timeRemaining) details.push(makeText("span", "session-detail", status.timeRemaining + " left"));
-  else if (status?.purchaseWindow) details.push(makeText("span", "session-detail", status.purchaseWindow + " once admitted"));
   if (session.error && !status?.message) details.push(makeText("span", "session-detail error", "Browser unavailable"));
   row.copy.disabled = row.copyClose.disabled = !session.shareable;
   row.card.replaceChildren(...details);
