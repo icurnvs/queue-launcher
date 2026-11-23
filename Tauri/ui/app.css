@@ -346,3 +346,6 @@ td:not(.history-link) { white-space: nowrap; }
   .session-card[aria-current=true], .session-card[aria-current=true]:hover { border-color: Highlight; outline: 1px solid Highlight; }
   :focus-visible, .masthead button:focus-visible { outline-color: Highlight; }
 }
+
+#settings-dialog { width: min(460px, calc(100vw - 40px)); }
+.settings-content { gap: 20px; }

@@ -94,8 +94,20 @@ mod win {
         ) -> Result<Self> {
             let allowed = original.clone();
             let popup = events.clone();
+            // Give background pages a usable viewport before their first load.
+            let initial_size = window
+                .inner_size()?
+                .to_logical::<f64>(window.scale_factor()?);
             let view = named_profiles::build_named(window, root, profile, move |builder| {
                 builder
+                    .with_bounds(wry::Rect {
+                        position: LogicalPosition::new(0., 0.).into(),
+                        size: LogicalSize::new(
+                            initial_size.width.max(1.),
+                            initial_size.height.max(1.),
+                        )
+                        .into(),
+                    })
                     .with_navigation_handler(move |target| {
                         Url::parse(&target).is_ok_and(|url| allows(&url, &allowed, demo))
                     })

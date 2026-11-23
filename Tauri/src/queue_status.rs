@@ -18,14 +18,21 @@ static AHEAD: LazyLock<Regex> = LazyLock::new(|| {
 });
 static ESTIMATED_WAIT: LazyLock<Regex> = LazyLock::new(|| {
     regex(
-        r"(?:estimated time to enter|your estimated wait time is)\s*:\s*((?:(?:more|less) than |about )?\d+\s*(?:hours?|minutes?|seconds?)(?:\s+(?:and\s+)?\d+\s*(?:minutes?|seconds?))?|over an hour|under a minute|calculating)",
+        r"(?:estimated time to enter|your estimated wait time is)\s*:\s*((?:(?:more|less) than |about |over |under )?(?:\d+\s*(?:hours?|minutes?|seconds?)(?:\s+(?:and\s+)?\d+\s*(?:hours?|minutes?|seconds?))*|an?\s+(?:hour|minute|second))|calculating)",
     )
 });
+static WAIT_DURATION: LazyLock<Regex> =
+    LazyLock::new(|| regex(r"\b(\d+|an?)\s+(hours?|minutes?|seconds?)\b"));
 static PURCHASE_WINDOW: LazyLock<Regex> =
     LazyLock::new(|| regex(r"(\d+\s+minutes?)\s+to complete your purchase"));
 static TIME_REMAINING: LazyLock<Regex> = LazyLock::new(|| {
     regex(
         r"(?:time remaining|time left)\s*:\s*(\d{1,2}:\d{2}(?::\d{2})?|\d+\s+(?:minutes?|seconds?))",
+    )
+});
+static PRE_QUEUE: LazyLock<Regex> = LazyLock::new(|| {
+    regex(
+        r"you[’']re early!?.*the queue for this product will begin soon.*(?:the event will begin at|\d+\s+minutes?\s+\d+\s+seconds?)",
     )
 });
 static IN_WAITING_ROOM: LazyLock<Regex> = LazyLock::new(|| {
@@ -40,6 +47,7 @@ pub struct QueueStatus {
     pub queue_id: Option<Uuid>,
     pub ahead: Option<i32>,
     pub estimated_wait: Option<String>,
+    pub estimated_wait_seconds: Option<u64>,
     pub purchase_window: Option<String>,
     pub time_remaining: Option<String>,
     pub message: Option<String>,
@@ -52,6 +60,35 @@ pub struct QueueObservation {
     pub event: &'static str,
     pub code: Option<i32>,
     pub members_ahead: Option<i32>,
+}
+
+fn wait_seconds(text: &str) -> Option<u64> {
+    let lower = text.to_ascii_lowercase();
+    let mut total = None;
+    for part in WAIT_DURATION.captures_iter(&lower) {
+        let amount = match &part[1] {
+            "a" | "an" => 1,
+            value => value.parse::<u64>().ok()?,
+        };
+        let unit = match &part[2] {
+            "hour" | "hours" => 3600,
+            "minute" | "minutes" => 60,
+            _ => 1,
+        };
+        total = Some(
+            total
+                .unwrap_or(0u64)
+                .checked_add(amount.checked_mul(unit)?)?,
+        );
+    }
+    let total = total?;
+    if lower.starts_with("more than ") || lower.starts_with("over ") {
+        total.checked_add(1)
+    } else if lower.starts_with("less than ") || lower.starts_with("under ") {
+        Some(total.saturating_sub(1))
+    } else {
+        Some(total)
+    }
 }
 
 impl QueueStatus {
@@ -72,15 +109,18 @@ impl QueueStatus {
             };
         }
 
+        let estimated_wait = capture(&ESTIMATED_WAIT, &flat).map(ToOwned::to_owned);
+        let estimated_wait_seconds = estimated_wait.as_deref().and_then(wait_seconds);
         Self {
             queue_id: capture(&QUEUE_ID, &flat).and_then(queue_id),
             ahead: capture(&AHEAD, &flat).and_then(|ahead| ahead.replace(',', "").parse().ok()),
-            estimated_wait: capture(&ESTIMATED_WAIT, &flat).map(ToOwned::to_owned),
+            estimated_wait,
+            estimated_wait_seconds,
             purchase_window: capture(&PURCHASE_WINDOW, &flat).map(ToOwned::to_owned),
             time_remaining: capture(&TIME_REMAINING, &flat).map(ToOwned::to_owned),
             message: None,
             error_id,
-            in_waiting_room: IN_WAITING_ROOM.is_match(&flat),
+            in_waiting_room: IN_WAITING_ROOM.is_match(&flat) || PRE_QUEUE.is_match(&flat),
         }
     }
 
@@ -210,6 +250,36 @@ mod tests {
             &format!("Queue ID: {ID}\nYou are now in the waiting room\nMembers ahead of you: 1,234\nEstimated time to enter: about 1 hour and 12 minutes\nYou have 10 minutes to complete your purchase\nTime remaining: 09:41"),
             None,
         )
+    }
+
+    #[test]
+    fn reads_numeric_and_worded_wait_estimates_without_a_member_count() {
+        for (text, seconds) in [
+            ("22 minutes", Some(1320)),
+            ("more than an hour", Some(3601)),
+            ("over an hour", Some(3601)),
+            ("less than a minute", Some(59)),
+            ("under a minute", Some(59)),
+            ("about 1 hour and 12 minutes", Some(4320)),
+            ("2 hours 3 minutes 4 seconds", Some(7384)),
+            ("calculating", None),
+        ] {
+            let status = QueueStatus::parse(&format!("Estimated time to enter: {text}"), None);
+            assert_eq!(status.estimated_wait.as_deref(), Some(text));
+            assert_eq!(status.estimated_wait_seconds, seconds, "{text}");
+            assert_eq!(status.ahead, None);
+        }
+        assert_eq!(wait_seconds("99999999999999999999 hours"), None);
+    }
+
+    #[test]
+    fn recognizes_the_pre_queue_countdown_as_a_waiting_room_state() {
+        let text = format!("Queue ID: {ID}\nYou’re early!\nThe queue for this product will begin soon.\nThe event will begin at: 12:32 PM PST\n20 Minutes 34 Seconds");
+        let status = QueueStatus::parse(&text, None);
+        assert!(status.in_waiting_room);
+        assert!(status.queue_id.is_some());
+        assert!(QueueStatus::parse(&text.replace('’', "'"), None).in_waiting_room);
+        assert!(!QueueStatus::parse("You're early!", None).in_waiting_room);
     }
 
     #[test]

@@ -14,9 +14,7 @@
       <span id="demo-indicator" class="mode-label" hidden>Demo mode</span>
     </div>
     <div class="toolbar masthead-actions" aria-label="Batch actions">
-      <button id="demo" type="button">Demo mode</button>
-      <button id="history" type="button">Link history</button>
-      <button id="logs" type="button">Drop logs</button>
+      <button id="settings" type="button">Settings</button>
       <button id="end" class="masthead-danger" type="button" hidden>End drop</button>
     </div>
   </header>
@@ -37,7 +35,7 @@
         <h2 id="sessions-heading">Sessions</h2>
         <span id="ready-count" aria-live="polite"></span>
       </div>
-      <label class="sort-control"><input id="sort" type="checkbox"> Sort by queue position</label>
+      <label class="sort-control" title="Members ahead first; estimated wait when member counts are unavailable."><input id="sort" type="checkbox"> Sort by position / wait</label>
       <div id="session-scroll" class="session-scroll">
         <p id="empty-sessions" class="muted">Sessions will appear here.</p>
         <ul id="session-list" class="session-list" aria-label="Open sessions"></ul>
@@ -86,6 +84,20 @@
   </main>
 
   <p id="notice" class="notice" role="alert" hidden></p>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-heading">
+    <div class="dialog-content settings-content">
+      <div class="panel-heading">
+        <h2 id="settings-heading">Settings</h2>
+        <button id="settings-close" type="button" data-initial-focus>Close</button>
+      </div>
+      <div class="toolbar settings-tools">
+        <button id="demo" type="button">Demo mode</button>
+        <button id="history" type="button">Link history</button>
+        <button id="logs" type="button">Drop logs</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="end-dialog" aria-labelledby="end-heading" aria-describedby="end-description">
     <form method="dialog" class="dialog-content">

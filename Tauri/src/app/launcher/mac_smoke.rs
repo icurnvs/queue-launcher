@@ -315,9 +315,41 @@ impl Check {
         })
     }
 
+    fn ui(&self, script: &'static str) -> Result<String> {
+        let (send, receive) = mpsc::channel();
+        self.main(move |window, _| {
+            window
+                .get_webview("app")
+                .ok_or("Launcher UI is missing")?
+                .eval_with_callback(script, move |value| {
+                    let _ = send.send(value);
+                })?;
+            Ok(())
+        })?;
+        receive
+            .recv_timeout(TIMEOUT)
+            .map_err(|_| "Launcher UI did not respond".into())
+    }
+
     fn initial(&self) -> Result<()> {
         self.open("/redirect", 2)?;
         self.ready(2, "/home")?;
+        wait("Settings control to become available", || {
+            Ok(self.ui("!controls.settings.disabled")? == "true")
+        })?;
+        self.ui("controls.settings.click(); true")?;
+        wait("Settings to open", || {
+            Ok(self.ui("controls['settings-dialog'].open && !!controls.demo && !!controls.logs && !!controls.history")? == "true")
+        })?;
+        self.ui("controls.history.click(); true")?;
+        wait("Link history to replace Settings", || {
+            Ok(
+                self.ui("controls['history-dialog'].open && !controls['settings-dialog'].open")?
+                    == "true",
+            )
+        })?;
+        self.ui("controls['history-dialog'].close(); true")?;
+        println!("PASS Settings opened and Link history replaced it without overlapping dialogs");
         let first = self.markers(1)?;
         let second = self.markers(2)?;
         ensure(

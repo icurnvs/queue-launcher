@@ -169,8 +169,12 @@ fn timestamp() -> String {
         .expect("a current UTC timestamp fits RFC3339")
 }
 
-pub fn position_key(number: u32, ahead: Option<i32>) -> (bool, Option<i32>, u32) {
-    (ahead.is_none(), ahead, number)
+pub fn position_key(number: u32, ahead: Option<i32>, wait_seconds: Option<u64>) -> (u8, u64, u32) {
+    match (ahead, wait_seconds) {
+        (Some(ahead), _) if ahead >= 0 => (0, ahead as u64, number),
+        (_, Some(seconds)) => (1, seconds, number),
+        _ => (2, 0, number),
+    }
 }
 
 pub fn remaining_selection(ordered: &[u32], selected: Option<u32>, removed: &[u32]) -> Option<u32> {
@@ -248,9 +252,23 @@ mod tests {
     }
 
     #[test]
+    fn sorts_by_position_then_estimated_wait_with_stable_ties_and_unknowns_last() {
+        let mut rows = [
+            (1, None, None),
+            (6, None, Some(1320)),
+            (2, None, Some(3601)),
+            (4, None, Some(1320)),
+            (3, Some(8), Some(3601)),
+            (5, Some(2), None),
+        ];
+        rows.sort_by_key(|&(number, ahead, wait)| position_key(number, ahead, wait));
+        assert_eq!(rows.map(|r| r.0), [5, 3, 4, 6, 2, 1]);
+    }
+
+    #[test]
     fn position_order_and_close_selection_follow_the_display_order() {
         let mut rows = [(1, None), (2, Some(8)), (3, Some(2)), (4, Some(8))];
-        rows.sort_by_key(|&(number, ahead)| position_key(number, ahead));
+        rows.sort_by_key(|&(number, ahead)| position_key(number, ahead, None));
         let ordered = rows.map(|(number, _)| number);
         assert_eq!(ordered, [3, 2, 4, 1]);
         assert_eq!(remaining_selection(&ordered, Some(2), &[2, 4]), Some(1));

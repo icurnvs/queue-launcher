@@ -127,7 +127,7 @@ function renderControls(active = activeSession()) {
   controls.add.hidden = controls.end.hidden = !hasSessions;
   controls.add.disabled = busy || !hasSessions || state.sessions.length >= 50;
   controls.end.disabled = busy || !hasSessions;
-  controls.history.disabled = controls.logs.disabled = !state || busy;
+  controls.history.disabled = controls.logs.disabled = controls.settings.disabled = !state || busy;
   controls.setup.hidden = hasSessions;
   controls["release-url"].disabled = busy || demo || !state;
   controls.count.disabled = busy || !state;
@@ -244,7 +244,8 @@ function createRow(number) {
 
 function renderCard(row, session, best) {
   const status = session.status;
-  const isBest = status?.ahead != null && status.ahead === best;
+  const isBest = status?.ahead != null ? status.ahead === best.ahead
+    : best.ahead === Infinity && status?.estimatedWaitSeconds != null && status.estimatedWaitSeconds === best.wait;
   const signature = JSON.stringify([session.ready, session.error, status, isBest, session.shareable]);
   if (signature === row.signature) return;
   row.signature = signature;
@@ -265,7 +266,11 @@ function renderCard(row, session, best) {
   } else if (status?.inWaitingRoom && !status.message) {
     details.push(makeText("span", "session-detail", "In the waiting room"));
   }
-  if (status?.estimatedWait) details.push(makeText("span", "session-detail", "Estimated wait " + status.estimatedWait));
+  if (status?.estimatedWait) {
+    const estimate = makeText("span", "session-detail", "Estimated wait " + status.estimatedWait);
+    if (isBest && status.ahead == null) estimate.append(document.createTextNode(" "), makeText("span", "best-spot", "Shortest wait"));
+    details.push(estimate);
+  }
   if (status?.timeRemaining) details.push(makeText("span", "session-detail", status.timeRemaining + " left"));
   else if (status?.purchaseWindow) details.push(makeText("span", "session-detail", status.purchaseWindow + " once admitted"));
   if (session.error && !status?.message) details.push(makeText("span", "session-detail error", "Browser unavailable"));
@@ -284,7 +289,10 @@ function renderSessionRows(revealSelection) {
     }
   }
 
-  const best = Math.min(...sessions.map(session => session.status?.ahead ?? Infinity));
+  const best = {
+    ahead: Math.min(...sessions.map(session => session.status?.ahead ?? Infinity)),
+    wait: Math.min(...sessions.map(session => session.status?.estimatedWaitSeconds ?? Infinity))
+  };
   const list = controls["session-list"];
   let firstUnordered = list.firstElementChild;
   for (const session of sessions) {
@@ -445,6 +453,12 @@ function closeDialog(dialog) {
   scheduleLayout();
 }
 
+function dismissSettings() {
+  if (modal !== controls["settings-dialog"]) return;
+  controls["settings-dialog"].close();
+  closeDialog(controls["settings-dialog"]);
+}
+
 async function showSessionActions(number, x, y) {
   if (modal || busyAction) return;
   try {
@@ -461,9 +475,9 @@ controls.setup.addEventListener("submit", event => {
   perform("open", { url: controls["release-url"].value.trim(), count: controls.count.valueAsNumber });
 });
 controls.sort.addEventListener("change", event => perform("sort", { enabled: event.target.checked }));
-controls.demo.addEventListener("click", () => perform("toggle_demo"));
+controls.demo.addEventListener("click", () => { dismissSettings(); perform("toggle_demo"); });
 controls.add.addEventListener("click", () => perform("add"));
-controls.logs.addEventListener("click", () => perform("open_logs"));
+controls.logs.addEventListener("click", () => { dismissSettings(); perform("open_logs"); });
 controls.reload.addEventListener("click", () => perform(activeSession()?.loading ? "stop" : "reload"));
 for (const kind of ["back", "forward", "mark", "retry"]) {
   controls[kind].addEventListener("click", () => perform(kind));
@@ -482,6 +496,7 @@ controls["end-dialog"].addEventListener("close", event => {
 });
 
 controls.history.addEventListener("click", () => {
+  dismissSettings();
   historyFeedback = "";
   renderHistory();
   showDialog(controls["history-dialog"]);
@@ -507,3 +522,7 @@ renderControls();
   if (!busyAction) await refresh();
   setTimeout(poll, 1000);
 })();
+
+controls.settings.addEventListener("click", () => showDialog(controls["settings-dialog"]));
+controls["settings-close"].addEventListener("click", () => controls["settings-dialog"].close());
+controls["settings-dialog"].addEventListener("close", event => closeDialog(event.target));

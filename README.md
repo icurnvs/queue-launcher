@@ -46,7 +46,7 @@ Open Anyway for Queue Launcher. Confirm Open when prompted. See
 4. Use Add session to add more sessions from the same release URL as you're
    ready to complete their CAPTCHAs.
 
-Try Demo mode with 12 offline sessions. Demo and live
+Open **Settings → Demo mode** to try 12 offline sessions. Demo and live
 batches have separate browser profiles, link history, logs, and preferences.
 
 ### Tracking sessions
@@ -70,7 +70,7 @@ remain available.
 
 ### Logs and local data
 
-Drop logs opens the log folder. Timestamped JSON Lines logs record event
+**Settings → Drop logs** opens the log folder. Timestamped JSON Lines logs record event
 names and numeric details. They exclude URLs, queue IDs, cookies, CAPTCHA
 answers, and tokens. Browser profiles and saved links stay on your
 computer.
@@ -85,3 +85,8 @@ See the [development guide](Tauri/README.md) for the source layout, prerequisite
 build commands, packaging, and offline verification.
 
 [Archived implementations and development notes](archive/README.md)
+
+Queue rows show both members ahead and estimated wait when available. Enable
+**Sort by position / wait** to use member counts first, then estimated waits for
+sessions without a member count. Shorter known waits appear before unknown
+waits. The sidebar recognizes estimates such as “more than an hour.”

@@ -176,12 +176,14 @@ impl Mode {
         let mut sessions: Vec<_> = batch.sessions.iter().collect();
         if self.saved.sort {
             sessions.sort_by_key(|session| {
+                let status = self
+                    .views
+                    .get(&session.profile)
+                    .and_then(|view| view.status.as_ref());
                 position_key(
                     session.number,
-                    self.views
-                        .get(&session.profile)
-                        .and_then(|view| view.status.as_ref())
-                        .and_then(|status| status.ahead),
+                    status.and_then(|status| status.ahead),
+                    status.and_then(|status| status.estimated_wait_seconds),
                 )
             });
         }
@@ -1138,7 +1140,9 @@ mod tests {
         assert_eq!(mode.current_url(), None);
 
         let original: Url = "https://queue-launcher.example/release".parse().unwrap();
-        let resume: Url = "https://queue-launcher.example/waiting?session=one".parse().unwrap();
+        let resume: Url = "https://queue-launcher.example/waiting?session=one"
+            .parse()
+            .unwrap();
         let mut batch = Batch::new(original.clone(), 2);
         batch.sessions[0].waiting_room_url = Some(resume.clone());
         batch.selected = Some(1);
