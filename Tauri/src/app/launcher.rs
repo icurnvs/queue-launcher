@@ -2,7 +2,7 @@ use crate::{
     browser::{self, Browser, BrowserEvents, Event, Layout},
     queue_status::{is_waiting_room, QueueObservation, QueueStatus},
     store::{position_key, remaining_selection, Batch, Link, Saved, Session, Store},
-    Result, Window, MAX_SESSIONS,
+    Result, Window,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -176,12 +176,14 @@ impl Mode {
         let mut sessions: Vec<_> = batch.sessions.iter().collect();
         if self.saved.sort {
             sessions.sort_by_key(|session| {
+                let status = self
+                    .views
+                    .get(&session.profile)
+                    .and_then(|view| view.status.as_ref());
                 position_key(
                     session.number,
-                    self.views
-                        .get(&session.profile)
-                        .and_then(|view| view.status.as_ref())
-                        .and_then(|status| status.ahead),
+                    status.and_then(|status| status.ahead),
+                    status.and_then(|status| status.estimated_wait_seconds),
                 )
             });
         }
@@ -451,8 +453,8 @@ impl Launcher {
     }
 
     fn open(&mut self, window: &Window, url: Url, count: u32) -> Result<()> {
-        if !(1..=MAX_SESSIONS).contains(&count) {
-            return Err("Choose between 1 and 50 sessions.".into());
+        if count == 0 {
+            return Err("Choose at least one session.".into());
         }
         let mode = self.active_mut();
         if mode.saved.batch.is_some() {
@@ -480,9 +482,6 @@ impl Launcher {
     fn add(&mut self, window: &Window) -> Result<()> {
         let mode = self.active_mut();
         let mut batch = mode.batch()?.clone();
-        if batch.sessions.len() >= MAX_SESSIONS as usize {
-            return Err("The batch already has 50 sessions.".into());
-        }
         let session = batch.add()?;
         let mut saved = mode.saved.clone();
         saved.batch = Some(batch.clone());
@@ -1138,7 +1137,9 @@ mod tests {
         assert_eq!(mode.current_url(), None);
 
         let original: Url = "https://queue-launcher.example/release".parse().unwrap();
-        let resume: Url = "https://queue-launcher.example/waiting?session=one".parse().unwrap();
+        let resume: Url = "https://queue-launcher.example/waiting?session=one"
+            .parse()
+            .unwrap();
         let mut batch = Batch::new(original.clone(), 2);
         batch.sessions[0].waiting_room_url = Some(resume.clone());
         batch.selected = Some(1);

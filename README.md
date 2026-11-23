@@ -39,14 +39,14 @@ Open Anyway for Queue Launcher. Confirm Open when prompted. See
 
 ## Using Queue Launcher
 
-1. Paste a release URL and choose 1 to 50 sessions. Start with a low number:
+1. Paste a release URL and choose your starting number of sessions. Start with a low number:
    CAPTCHAs expire, so open only as many sessions as you can work through promptly.
 2. Click Open sessions. Select a session in the sidebar to view its page.
 3. Complete the site's CAPTCHA, then click Mark ready to track that session.
 4. Use Add session to add more sessions from the same release URL as you're
    ready to complete their CAPTCHAs.
 
-Try Demo mode with 12 offline sessions. Demo and live
+Open **Settings → Demo mode** to try 12 offline sessions. Demo and live
 batches have separate browser profiles, link history, logs, and preferences.
 
 ### Tracking sessions
@@ -58,7 +58,8 @@ members ahead. Mark ready records the status you set manually.
 
 ### Sharing links and resuming a batch
 
-Use Copy to copy a session's shareable queue link, or Copy and close
+A confirmed waiting-room session with a valid Queue ID can be shared even when
+no members-ahead count is displayed. Use Copy to copy its queue link, or Copy and close
 to copy it and close the session. Link history keeps saved links available
 after sessions close or the app restarts. The site controls whether a shared
 link or queue position is still valid.
@@ -70,7 +71,7 @@ remain available.
 
 ### Logs and local data
 
-Drop logs opens the log folder. Timestamped JSON Lines logs record event
+**Settings → Drop logs** opens the log folder. Timestamped JSON Lines logs record event
 names and numeric details. They exclude URLs, queue IDs, cookies, CAPTCHA
 answers, and tokens. Browser profiles and saved links stay on your
 computer.
@@ -85,3 +86,8 @@ See the [development guide](Tauri/README.md) for the source layout, prerequisite
 build commands, packaging, and offline verification.
 
 [Archived implementations and development notes](archive/README.md)
+
+Queue rows show both members ahead and estimated wait when available. Enable
+**Sort by position / wait** to use member counts first, then estimated waits for
+sessions without a member count. Shorter known waits appear before unknown
+waits. The sidebar recognizes estimates such as “more than an hour.”

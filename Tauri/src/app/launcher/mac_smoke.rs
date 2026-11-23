@@ -31,7 +31,7 @@ pub enum Phase {
     Initial,
     Reopen,
     Cleanup,
-    Fifty,
+    Scale(u32),
 }
 
 pub fn phase() -> Result<Option<Phase>> {
@@ -43,8 +43,13 @@ pub fn phase() -> Result<Option<Phase>> {
         Some("initial") => Phase::Initial,
         Some("reopen") => Phase::Reopen,
         Some("cleanup") => Phase::Cleanup,
-        Some("50") => Phase::Fifty,
-        _ => return Err("Choose initial, reopen, cleanup, or 50 for offline verification.".into()),
+        Some("50") => Phase::Scale(50),
+        Some("51") => Phase::Scale(51),
+        _ => {
+            return Err(
+                "Choose initial, reopen, cleanup, 50, or 51 for offline verification.".into(),
+            )
+        }
     }))
 }
 
@@ -54,10 +59,10 @@ impl Phase {
             std::env::var_os("QUEUE_LAUNCHER_DATA").is_some(),
             "Offline verification requires QUEUE_LAUNCHER_DATA.",
         )?;
-        let fresh = matches!(self, Self::Initial | Self::Fifty);
+        let fresh = matches!(self, Self::Initial | Self::Scale(_));
         ensure(
             if fresh { !root.try_exists()? } else { root.join("offline-evidence.json").is_file() },
-            "Use a new scratch directory for initial/50, or reuse the initial scratch for reopen/cleanup.",
+            "Use a new scratch directory for initial/scale, or reuse the initial scratch for reopen/cleanup.",
         )?;
         start_fixture()
     }
@@ -83,7 +88,7 @@ pub fn run(app: AppHandle, phase: Phase) {
             Phase::Initial => check.initial(),
             Phase::Reopen => check.reopen(),
             Phase::Cleanup => check.cleanup(),
-            Phase::Fifty => check.scale(50),
+            Phase::Scale(count) => check.scale(count),
         });
         check.0.exit(code);
     });
@@ -103,18 +108,22 @@ fn start_fixture() -> Result<()> {
                 _ => None,
             };
             if let Some(location) = location {
-                let _ =
-                    request.respond(Response::empty(302).with_header(header("Location", location)));
+                let _ = respond_fixture(
+                    request,
+                    Response::empty(302).with_header(header("Location", location)),
+                );
             } else if request.url() == "/slow" {
                 thread::spawn(move || {
                     thread::sleep(Duration::from_secs(2));
-                    let _ = request.respond(
+                    let _ = respond_fixture(
+                        request,
                         Response::from_string(PAGE)
                             .with_header(header("Content-Type", "text/html")),
                     );
                 });
             } else {
-                let _ = request.respond(
+                let _ = respond_fixture(
+                    request,
                     Response::from_string(PAGE)
                         .with_header(header("Content-Type", "text/html"))
                         .with_header(header("Cache-Control", "no-store")),
@@ -123,6 +132,17 @@ fn start_fixture() -> Result<()> {
         }
     });
     Ok(())
+}
+
+// HTTP/1.0 closes idle fixture connections so simultaneous browser profiles do
+// not occupy every tiny HTTP connection worker while more profiles are queued.
+fn respond_fixture<R: std::io::Read>(
+    request: tiny_http::Request,
+    response: Response<R>,
+) -> std::io::Result<()> {
+    let mut writer = request.into_writer();
+    response.raw_print(&mut writer, tiny_http::HTTPVersion(1, 0), &[], false, None)?;
+    std::io::Write::flush(&mut writer)
 }
 
 fn header(name: &str, value: &str) -> Header {
@@ -315,9 +335,43 @@ impl Check {
         })
     }
 
+    fn ui(&self, script: &'static str) -> Result<String> {
+        let (send, receive) = mpsc::channel();
+        self.main(move |window, _| {
+            window
+                .get_webview("app")
+                .ok_or("Launcher UI is missing")?
+                .eval_with_callback(script, move |value| {
+                    let _ = send.send(value);
+                })?;
+            Ok(())
+        })?;
+        receive
+            .recv_timeout(TIMEOUT)
+            .map_err(|_| "Launcher UI did not respond".into())
+    }
+
     fn initial(&self) -> Result<()> {
         self.open("/redirect", 2)?;
         self.ready(2, "/home")?;
+        wait("Settings control to become available", || {
+            Ok(self
+                .ui("!controls.settings.disabled")
+                .is_ok_and(|value| value == "true"))
+        })?;
+        self.ui("controls.settings.click(); true")?;
+        wait("Settings to open", || {
+            Ok(self.ui("controls['settings-dialog'].open && !!controls.demo && !!controls.logs && !!controls.history")? == "true")
+        })?;
+        self.ui("controls.history.click(); true")?;
+        wait("Link history to replace Settings", || {
+            Ok(
+                self.ui("controls['history-dialog'].open && !controls['settings-dialog'].open")?
+                    == "true",
+            )
+        })?;
+        self.ui("controls['history-dialog'].close(); true")?;
+        println!("PASS Settings opened and Link history replaced it without overlapping dialogs");
         let first = self.markers(1)?;
         let second = self.markers(2)?;
         ensure(

@@ -194,7 +194,7 @@ sh Tauri/verify-macos-app.sh
 
 The application checks run in debug builds with scratch data. The macOS script
 checks navigation, storage isolation, relaunch, cleanup recovery, and 12- and
-50-session batches. Its fixture uses port **43194**, and Demo uses **43193**.
+51-session batches. Its fixture uses port **43194**, and Demo uses **43193**.
 Check packaged release apps separately through their normal UI.
 
 For a manual offline check, open the file URL for

@@ -33,7 +33,6 @@ const WIDTH: f64 = 1180.0;
 const HEIGHT: f64 = 800.0;
 #[cfg(target_os = "windows")]
 const TOOLBAR: f64 = 120.0;
-const MAX_SESSIONS: u32 = 50;
 const READ_PAGE: &str = include_str!("../read_queue_page.js");
 
 fn on_main<T: Send + 'static>(
