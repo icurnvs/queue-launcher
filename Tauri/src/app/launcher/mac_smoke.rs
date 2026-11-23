@@ -140,13 +140,9 @@ fn respond_fixture<R: std::io::Read>(
     request: tiny_http::Request,
     response: Response<R>,
 ) -> std::io::Result<()> {
-    response.raw_print(
-        request.into_writer(),
-        tiny_http::HTTPVersion(1, 0),
-        &[],
-        false,
-        None,
-    )
+    let mut writer = request.into_writer();
+    response.raw_print(&mut writer, tiny_http::HTTPVersion(1, 0), &[], false, None)?;
+    std::io::Write::flush(&mut writer)
 }
 
 fn header(name: &str, value: &str) -> Header {
