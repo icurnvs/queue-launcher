@@ -125,7 +125,7 @@ function renderControls(active = activeSession()) {
   setText(controls.add, busyAction === "add" ? "Adding session..." : "Add session");
   setText(controls.open, busyAction === "open" ? "Opening sessions..." : "Open sessions");
   controls.add.hidden = controls.end.hidden = !hasSessions;
-  controls.add.disabled = busy || !hasSessions || state.sessions.length >= 50;
+  controls.add.disabled = busy || !hasSessions;
   controls.end.disabled = busy || !hasSessions;
   controls.history.disabled = controls.logs.disabled = controls.settings.disabled = !state || busy;
   controls.setup.hidden = hasSessions;

@@ -165,7 +165,9 @@ impl QueueStatus {
     }
 
     pub fn share_url(&self, url: &Url) -> Option<Url> {
-        self.ahead?;
+        if self.error_id.is_some() || (self.ahead.is_none() && !self.in_waiting_room) {
+            return None;
+        }
         let mut resume = self.resume_url(url)?;
         for name in ["c", "e", "t", "q"] {
             let mut matches = parameters(&resume).filter(|parameter| parameter.name() == name);
@@ -342,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn requires_queue_position_to_share_and_ignores_invalid_queue_ids() {
+    fn requires_waiting_room_evidence_to_share_and_ignores_invalid_queue_ids() {
         let id_without_hyphens = ID.replace('-', "");
         let url = Url::parse(&format!(
             "https://wr.costco.com/?c=costco&e=drop&t=target&q={id_without_hyphens}"
@@ -354,6 +356,33 @@ mod tests {
             Some(format!("c=costco&e=drop&t=target&q={ID}").as_str())
         );
         assert!(status.share_url(&url).is_none());
+    }
+
+    #[test]
+    fn shares_confirmed_waiting_room_without_a_member_count() {
+        let url = Url::parse(&format!(
+            "https://wr.costco.com/?c=costco&e=drop&t={TARGET}&token=private"
+        ))
+        .unwrap();
+        let status = QueueStatus::parse(&format!("Queue ID: {ID} Welcome! You Are Now in The Virtual Queue. Estimated time to enter: 22 minutes"), None);
+        assert_eq!(status.ahead, None);
+        let shared = status
+            .share_url(&url)
+            .expect("Confirmed queue must be shareable without members ahead");
+        assert_eq!(
+            shared.query(),
+            Some(format!("c=costco&e=drop&t={TARGET}&q={ID}").as_str())
+        );
+        assert!(
+            QueueStatus::parse(&format!("Queue ID: {ID} You are now in the queue"), Some(7))
+                .share_url(&url)
+                .is_none()
+        );
+        assert!(
+            QueueStatus::parse("Queue ID: invalid You are now in the queue", None)
+                .share_url(&url)
+                .is_none()
+        );
     }
 
     #[test]

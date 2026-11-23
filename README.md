@@ -39,7 +39,7 @@ Open Anyway for Queue Launcher. Confirm Open when prompted. See
 
 ## Using Queue Launcher
 
-1. Paste a release URL and choose 1 to 50 sessions. Start with a low number:
+1. Paste a release URL and choose your starting number of sessions. Start with a low number:
    CAPTCHAs expire, so open only as many sessions as you can work through promptly.
 2. Click Open sessions. Select a session in the sidebar to view its page.
 3. Complete the site's CAPTCHA, then click Mark ready to track that session.
@@ -58,7 +58,8 @@ members ahead. Mark ready records the status you set manually.
 
 ### Sharing links and resuming a batch
 
-Use Copy to copy a session's shareable queue link, or Copy and close
+A confirmed waiting-room session with a valid Queue ID can be shared even when
+no members-ahead count is displayed. Use Copy to copy its queue link, or Copy and close
 to copy it and close the session. Link history keeps saved links available
 after sessions close or the app restarts. The site controls whether a shared
 link or queue position is still valid.

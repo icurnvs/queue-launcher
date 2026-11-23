@@ -31,7 +31,7 @@ pub enum Phase {
     Initial,
     Reopen,
     Cleanup,
-    Fifty,
+    Scale(u32),
 }
 
 pub fn phase() -> Result<Option<Phase>> {
@@ -43,8 +43,13 @@ pub fn phase() -> Result<Option<Phase>> {
         Some("initial") => Phase::Initial,
         Some("reopen") => Phase::Reopen,
         Some("cleanup") => Phase::Cleanup,
-        Some("50") => Phase::Fifty,
-        _ => return Err("Choose initial, reopen, cleanup, or 50 for offline verification.".into()),
+        Some("50") => Phase::Scale(50),
+        Some("51") => Phase::Scale(51),
+        _ => {
+            return Err(
+                "Choose initial, reopen, cleanup, 50, or 51 for offline verification.".into(),
+            )
+        }
     }))
 }
 
@@ -54,10 +59,10 @@ impl Phase {
             std::env::var_os("QUEUE_LAUNCHER_DATA").is_some(),
             "Offline verification requires QUEUE_LAUNCHER_DATA.",
         )?;
-        let fresh = matches!(self, Self::Initial | Self::Fifty);
+        let fresh = matches!(self, Self::Initial | Self::Scale(_));
         ensure(
             if fresh { !root.try_exists()? } else { root.join("offline-evidence.json").is_file() },
-            "Use a new scratch directory for initial/50, or reuse the initial scratch for reopen/cleanup.",
+            "Use a new scratch directory for initial/scale, or reuse the initial scratch for reopen/cleanup.",
         )?;
         start_fixture()
     }
@@ -83,7 +88,7 @@ pub fn run(app: AppHandle, phase: Phase) {
             Phase::Initial => check.initial(),
             Phase::Reopen => check.reopen(),
             Phase::Cleanup => check.cleanup(),
-            Phase::Fifty => check.scale(50),
+            Phase::Scale(count) => check.scale(count),
         });
         check.0.exit(code);
     });
@@ -335,7 +340,9 @@ impl Check {
         self.open("/redirect", 2)?;
         self.ready(2, "/home")?;
         wait("Settings control to become available", || {
-            Ok(self.ui("!controls.settings.disabled")? == "true")
+            Ok(self
+                .ui("!controls.settings.disabled")
+                .is_ok_and(|value| value == "true"))
         })?;
         self.ui("controls.settings.click(); true")?;
         wait("Settings to open", || {

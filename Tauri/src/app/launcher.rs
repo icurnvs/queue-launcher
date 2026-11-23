@@ -2,7 +2,7 @@ use crate::{
     browser::{self, Browser, BrowserEvents, Event, Layout},
     queue_status::{is_waiting_room, QueueObservation, QueueStatus},
     store::{position_key, remaining_selection, Batch, Link, Saved, Session, Store},
-    Result, Window, MAX_SESSIONS,
+    Result, Window,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -453,8 +453,8 @@ impl Launcher {
     }
 
     fn open(&mut self, window: &Window, url: Url, count: u32) -> Result<()> {
-        if !(1..=MAX_SESSIONS).contains(&count) {
-            return Err("Choose between 1 and 50 sessions.".into());
+        if count == 0 {
+            return Err("Choose at least one session.".into());
         }
         let mode = self.active_mut();
         if mode.saved.batch.is_some() {
@@ -482,9 +482,6 @@ impl Launcher {
     fn add(&mut self, window: &Window) -> Result<()> {
         let mode = self.active_mut();
         let mut batch = mode.batch()?.clone();
-        if batch.sessions.len() >= MAX_SESSIONS as usize {
-            return Err("The batch already has 50 sessions.".into());
-        }
         let session = batch.add()?;
         let mut saved = mode.saved.clone();
         saved.batch = Some(batch.clone());
