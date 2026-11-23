@@ -108,18 +108,22 @@ fn start_fixture() -> Result<()> {
                 _ => None,
             };
             if let Some(location) = location {
-                let _ =
-                    request.respond(Response::empty(302).with_header(header("Location", location)));
+                let _ = respond_fixture(
+                    request,
+                    Response::empty(302).with_header(header("Location", location)),
+                );
             } else if request.url() == "/slow" {
                 thread::spawn(move || {
                     thread::sleep(Duration::from_secs(2));
-                    let _ = request.respond(
+                    let _ = respond_fixture(
+                        request,
                         Response::from_string(PAGE)
                             .with_header(header("Content-Type", "text/html")),
                     );
                 });
             } else {
-                let _ = request.respond(
+                let _ = respond_fixture(
+                    request,
                     Response::from_string(PAGE)
                         .with_header(header("Content-Type", "text/html"))
                         .with_header(header("Cache-Control", "no-store")),
@@ -128,6 +132,21 @@ fn start_fixture() -> Result<()> {
         }
     });
     Ok(())
+}
+
+// HTTP/1.0 closes idle fixture connections so simultaneous browser profiles do
+// not occupy every tiny HTTP connection worker while more profiles are queued.
+fn respond_fixture<R: std::io::Read>(
+    request: tiny_http::Request,
+    response: Response<R>,
+) -> std::io::Result<()> {
+    response.raw_print(
+        request.into_writer(),
+        tiny_http::HTTPVersion(1, 0),
+        &[],
+        false,
+        None,
+    )
 }
 
 fn header(name: &str, value: &str) -> Header {
